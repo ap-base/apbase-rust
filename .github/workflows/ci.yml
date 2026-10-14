@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Same Ubuntu release as the development machine (GEOS/PROJ/glibc versions).
+  SYSTEM_PACKAGES: >-
+    ca-certificates curl git gcc g++ gfortran pkg-config zstd
+    libopenblas-dev libgeos-dev libproj-dev
+
+jobs:
+  lint:
+    name: fmt, clippy, docs
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: System libraries
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $SYSTEM_PACKAGES
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings
+      - name: Docs
+        run: cargo doc --release --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: System libraries
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $SYSTEM_PACKAGES
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit, integration and doc tests
+        run: cargo test --release
+      - name: Example
+        run: cargo run --release --example quick_use
+
+  msrv:
+    name: minimum Rust (1.85)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: System libraries
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $SYSTEM_PACKAGES
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: Check
+        run: cargo check --all-targets

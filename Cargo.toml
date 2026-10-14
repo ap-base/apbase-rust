@@ -1,0 +1,26 @@
+[package]
+name = "apbase"
+version = "0.1.2"
+edition = "2024"
+rust-version = "1.85"
+description = "High-performance automated map-generation pipeline for precision agriculture"
+license = "Apache-2.0"
+readme = "README.md"
+homepage = "https://apbase.io"
+documentation = "https://apbase.io"
+keywords = ["geostatistics", "kriging", "idw", "interpolation", "agriculture"]
+categories = ["science::geo", "mathematics"]
+# Local-only for now: cargo refuses to publish while this is false.
+publish = false
+include = ["/src/**", "/native/**", "/build.rs", "/README.md", "/LICENSE", "/Cargo.toml"]
+
+[dependencies]
+geos = { version = "11.3", features = ["v3_12_0"] }
+getrandom = "0.4"
+indexmap = "2.14"
+log = "0.4"
+ndarray = "0.17"
+proj = "0.31"
+
+[dev-dependencies]
+csv = "1.4"
