@@ -7,6 +7,10 @@ on:
         description: "Release tag, equal to the version in Cargo.toml (e.g. 0.1.2)"
         type: string
         required: true
+      kernels_version:
+        description: "Release tag of ap-base/apbase-fortran-kernels with the native library"
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -16,7 +20,7 @@ env:
   # Same Ubuntu release as ci.yml (GEOS/PROJ/glibc versions).
   SYSTEM_PACKAGES: >-
     ca-certificates curl git gcc g++ gfortran pkg-config zstd
-    libopenblas-dev libgeos-dev libproj-dev
+    libopenblas-dev libgeos-dev libproj-dev jq
 
 jobs:
   release:
@@ -40,10 +44,28 @@ jobs:
             echo "::error::version input '$VERSION' differs from Cargo.toml '$crate_version'" >&2
             exit 1
           fi
+      - name: Native library from the kernels release
+        shell: bash
+        env:
+          KERNELS_TOKEN: ${{ secrets.APBASE_KERNELS_TOKEN }}
+          KERNELS_VERSION: ${{ inputs.kernels_version }}
+        run: |
+          set -euo pipefail
+          api=https://api.github.com/repos/ap-base/apbase-fortran-kernels
+          auth=(-H "Authorization: Bearer ${KERNELS_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+          asset=libapbase_native-x86_64-unknown-linux-gnu.a
+          url="$(curl -fsSL "${auth[@]}" "${api}/releases/tags/${KERNELS_VERSION}" \
+            | jq -r --arg name "${asset}" '.assets[] | select(.name == $name) | .url')"
+          if [ -z "${url}" ]; then
+            echo "::error::kernels release ${KERNELS_VERSION} has no ${asset}" >&2
+            exit 1
+          fi
+          curl -fsSL "${auth[@]}" -H "Accept: application/octet-stream" \
+            -o native/x86_64-unknown-linux-gnu/libapbase_native.a "${url}"
       - name: Tests
         run: cargo test --release
       - name: Package
-        run: cargo package
+        run: cargo package --allow-dirty
       - name: GitHub release
         uses: softprops/action-gh-release@v2
         with:
