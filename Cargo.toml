@@ -7,11 +7,10 @@ description = "High-performance automated map-generation pipeline for precision 
 license = "Apache-2.0"
 readme = "README.md"
 homepage = "https://apbase.io"
+repository = "https://github.com/ap-base/apbase-rust"
 documentation = "https://apbase.io"
 keywords = ["geostatistics", "kriging", "idw", "interpolation", "agriculture"]
 categories = ["science::geo", "mathematics"]
-# Local-only for now: cargo refuses to publish while this is false.
-publish = false
 include = ["/src/**", "/native/**", "/build.rs", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]

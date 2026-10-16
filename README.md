@@ -1,6 +1,6 @@
 # APbase (Rust)
 
-[![Version](https://img.shields.io/badge/version-0.1.2-informational.svg)](Cargo.toml)
+[![Crates.io](https://img.shields.io/crates/v/apbase.svg)](https://crates.io/crates/apbase)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
 [![Kernel: Fortran](https://img.shields.io/badge/kernel-Fortran-734f96.svg)](#performance)
@@ -18,18 +18,20 @@ map without requiring users to choose a mathematical model by hand.
 
 Full documentation: https://apbase.io
 
-> Status: released on GitHub; not on crates.io yet.
-
 ## Install
 
-From a GitHub release tag:
+```bash
+cargo add apbase
+```
+
+or in `Cargo.toml`:
 
 ```toml
 [dependencies]
-apbase = { git = "https://github.com/ap-base/apbase-rust", tag = "0.1.2" }
+apbase = "0.1.2"
 ```
 
-Each [release](https://github.com/ap-base/apbase-rust/releases) also carries the packaged
+Each GitHub [release](https://github.com/ap-base/apbase-rust/releases) also carries the packaged
 `apbase-<version>.crate`.
 
 System libraries (Fortran/OpenMP/BLAS runtime, GEOS and PROJ):
