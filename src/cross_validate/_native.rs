@@ -61,7 +61,6 @@ pub(crate) fn run_cross_validate(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: source arrays hold `n` values, sample and prediction arrays `nsamples`.
     unsafe {
         lib::cross_validate_local_(
             x.as_ptr(),
@@ -106,11 +105,14 @@ pub(crate) struct CokrigingCrossValidateInputs<'a> {
     pub(crate) secondary_y: &'a [f64],
     pub(crate) secondary_z: &'a [f64],
     pub(crate) secondary_offset: &'a [i32],
+    pub(crate) run_collocated: bool,
     pub(crate) collocated_model: &'a [f64],
+    pub(crate) run_icm: bool,
     pub(crate) icm_model_id: f64,
     pub(crate) icm_range: f64,
     pub(crate) icm_nugget: &'a Array2<f64>,
     pub(crate) icm_sill: &'a Array2<f64>,
+    pub(crate) run_lmc: bool,
     pub(crate) lmc_model_id: f64,
     pub(crate) lmc_ranges: &'a [f64],
     pub(crate) lmc_coefficients: &'a Array3<f64>,
@@ -159,7 +161,9 @@ pub(crate) fn run_cokriging_cross_validate(
     let icm_nugget = fortran_order(inputs.icm_nugget);
     let icm_sill = fortran_order(inputs.icm_sill);
     let lmc_coefficients = fortran_order(inputs.lmc_coefficients);
-    let run: c_int = 1;
+    let run_collocated: c_int = c_int::from(inputs.run_collocated);
+    let run_icm: c_int = c_int::from(inputs.run_icm);
+    let run_lmc: c_int = c_int::from(inputs.run_lmc);
 
     let samples = inputs.sample_idx.len();
     let mut predictions = [
@@ -175,8 +179,6 @@ pub(crate) fn run_cokriging_cross_validate(
     let [collocated_n_valid, icm_n_valid, lmc_n_valid] = &mut n_valid;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it;
-    // matrices are column-major buffers.
     unsafe {
         lib::cokriging_cross_validate_local_(
             inputs.x0.as_ptr(),
@@ -187,14 +189,14 @@ pub(crate) fn run_cokriging_cross_validate(
             inputs.secondary_y.as_ptr(),
             inputs.secondary_z.as_ptr(),
             inputs.secondary_offset.as_ptr(),
-            &run,
+            &run_collocated,
             inputs.collocated_model.as_ptr(),
-            &run,
+            &run_icm,
             &inputs.icm_model_id,
             &inputs.icm_range,
             icm_nugget.as_ptr(),
             icm_sill.as_ptr(),
-            &run,
+            &run_lmc,
             &inputs.lmc_model_id,
             inputs.lmc_ranges.as_ptr(),
             lmc_coefficients.as_ptr(),
@@ -361,11 +363,14 @@ mod tests {
             secondary_y: &y,
             secondary_z: &secondary,
             secondary_offset: &[0, 36],
+            run_collocated: true,
             collocated_model: &[1.0, 0.1, 1.0, 40.0, 0.0, 0.7],
+            run_icm: true,
             icm_model_id: 1.0,
             icm_range: 40.0,
             icm_nugget: &nugget,
             icm_sill: &sill,
+            run_lmc: true,
             lmc_model_id: 1.0,
             lmc_ranges: &[40.0],
             lmc_coefficients: &coefficients,
@@ -452,9 +457,6 @@ mod tests {
             table,
             model,
         );
-        // Out-of-range sample indices are kernel status 7, which COKRIGING_STATUS_ERRORS
-        // maps to the non-PSD error; the public layer only passes indices it drew
-        // itself, so only the raw code is checked.
         assert_eq!(
             status(CokrigingCrossValidateInputs {
                 sample_idx: &[0],

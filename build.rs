@@ -21,7 +21,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=APBASE_BLAS_LIBS");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
 
-    // docs.rs only renders documentation: nothing is linked there.
     if env::var_os("DOCS_RS").is_some() {
         return;
     }

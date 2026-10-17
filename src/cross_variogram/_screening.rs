@@ -15,10 +15,10 @@ use crate::variogram::{ModelParams, Variogram, VariogramOptions};
 fn status_message(status: i32) -> String {
     match status {
         0 => "ok".to_string(),
-        1 => "amostra insuficiente".to_string(),
-        2 => "modelo auto-variograma invalido".to_string(),
-        3 => "modelo cross-variograma invalido".to_string(),
-        other => format!("status desconhecido ({other})"),
+        1 => "insufficient sample".to_string(),
+        2 => "invalid auto-variogram model".to_string(),
+        3 => "invalid cross-variogram model".to_string(),
+        other => format!("unknown status ({other})"),
     }
 }
 
@@ -78,7 +78,7 @@ pub struct CovariateReport {
     pub n_pairs: i64,
     /// Whether the candidate was selected.
     pub decision: bool,
-    /// Native status as a readable string (`"ok"`, `"amostra insuficiente"`, ...).
+    /// Native status as a readable string (`"ok"`, `"insufficient sample"`, ...).
     pub status: String,
     /// Cross-variogram parameters, only when the native status is `0`.
     pub model_params: Option<ModelParams>,

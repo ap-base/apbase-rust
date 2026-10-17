@@ -210,7 +210,6 @@ pub(crate) fn guess_from_slices(x: &[f64], y: &[f64], assume_finite: bool) -> Co
 }
 
 thread_local! {
-    // `lru_cache(maxsize=64)` around `_utm_transformer`; PROJ objects are not Send.
     static UTM_TRANSFORMERS: RefCell<Vec<(i64, Rc<Proj>)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -316,7 +315,6 @@ fn lonlat_to_utm_xy(lon: &[f64], lat: &[f64], epsg: i64) -> Result<(Vec<f64>, Ve
     let mut y_utm = vec![f64::NAN; lat.len()];
     for (i, (&lon_value, &lat_value)) in lon.iter().zip(lat).enumerate() {
         if lon_value.is_finite() && lat_value.is_finite() {
-            // Points PROJ cannot transform become inf instead of an error.
             let (x, y) = transformer
                 .project((lon_value, lat_value), false)
                 .unwrap_or((f64::INFINITY, f64::INFINITY));
@@ -751,7 +749,6 @@ mod tests {
 
     #[test]
     fn utm_matches_reference_values() {
-        // Reference EPSG:4326 -> EPSG:32722 / EPSG:32633 conversions.
         let (x, y) = lonlat_to_utm_xy(&[-47.5], &[-15.75], 32722).unwrap();
         assert_eq!((x[0], y[0]), (875132.8789027982, 8255605.003636604));
         let (x, y) = lonlat_to_utm_xy(&[15.2], &[45.1], 32633).unwrap();

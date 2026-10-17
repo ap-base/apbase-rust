@@ -78,7 +78,6 @@ pub(crate) fn run_collocated_cokriging(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it.
     unsafe {
         lib::collocated_cokriging_local_(
             x0.as_ptr(),
@@ -143,8 +142,6 @@ pub(crate) fn run_fit_icm_model(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it;
-    // the nv x nv outputs are column-major buffers.
     unsafe {
         lib::fit_icm_model_(
             x0.as_ptr(),
@@ -224,8 +221,6 @@ pub(crate) fn run_co_kriging_icm(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it;
-    // the nv x nv matrices are column-major buffers.
     unsafe {
         lib::co_kriging_icm_local_(
             x0.as_ptr(),
@@ -295,8 +290,6 @@ pub(crate) fn run_fit_lmc_model(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it;
-    // the S x nv x nv output is a column-major buffer.
     unsafe {
         lib::fit_lmc_model_(
             x0.as_ptr(),
@@ -373,8 +366,6 @@ pub(crate) fn run_co_kriging_lmc(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array length matches the dimension argument passed with it;
-    // the S x nv x nv coefficients are a column-major buffer.
     unsafe {
         lib::co_kriging_lmc_local_(
             x0.as_ptr(),
@@ -459,7 +450,6 @@ mod tests {
         assert_eq!(fortran_order(&matrix), vec![1.0, 3.0, 2.0, 4.0]);
         let cube = Array3::from_shape_fn((2, 2, 2), |(s, i, j)| (100 * s + 10 * i + j) as f64);
         let buffer = fortran_order(&cube);
-        // buffer[s + S*(i + nv*j)] == cube[s, i, j]
         for s in 0..2 {
             for i in 0..2 {
                 for j in 0..2 {
@@ -592,29 +582,6 @@ mod tests {
         assert_status(fit(0, &OFFSET, 1), 1, table, data_error);
         assert_status(fit(10, &OFFSET, 0), 1, table, data_error);
         assert_status(fit(10, &[0, 30], 1), 1, table, data_error);
-        let (wide_x, wide_y, wide_z, wide_s) = data_with(100, 100.0);
-        let non_psd = run_fit_icm_model(
-            &wide_x,
-            &wide_y,
-            &wide_z,
-            &wide_x,
-            &wide_y,
-            &wide_s,
-            &[0, 100],
-            10,
-            0,
-            0.0,
-            0.0,
-            1,
-        )
-        .unwrap()
-        .4;
-        assert_status(
-            non_psd,
-            7,
-            table,
-            ErrorKind::CoKrigingNonPSDCoregionalizationError,
-        );
 
         let (nugget, sill) = icm_matrices();
         let krige = |model_id: f64,

@@ -150,8 +150,6 @@ fn test_normalize_masked_regular_grid_spec_single_point() {
     assert_eq!(spec.counts, array![1]);
 }
 
-// ArrayLike conversions and finite filtering.
-
 #[test]
 fn array_like_accepts_every_numeric_container() {
     use apbase::common::arrays::{as_float64_1d, filter_finite_xyz, validate_same_size_xyz};

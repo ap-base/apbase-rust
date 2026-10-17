@@ -37,7 +37,6 @@ pub(crate) fn run_local_zstats(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array argument holds `n` values.
     unsafe {
         lib::viz_zstats_radius_gridagg_(
             x.as_ptr(),
@@ -81,7 +80,6 @@ pub(crate) fn run_filter_mask(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: every array argument holds `n` values.
     unsafe {
         lib::viz_filter_mask_(
             pct_diff.as_ptr(),

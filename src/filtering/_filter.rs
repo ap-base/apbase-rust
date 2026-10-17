@@ -19,7 +19,6 @@ pub const DEFAULT_CELL_FACTOR: i64 = 3;
 /// Default IQR whisker of the global filter.
 pub const DEFAULT_GLOBAL_IQR_WHISKER: f64 = 3.0;
 
-// Fixed variogram profile used to derive radius when it is not passed explicitly.
 const VARIOGRAM_N_LAGS: i64 = 20;
 const VARIOGRAM_MAX_PAIRS: i64 = 100_000;
 const VARIOGRAM_MAX_DISTANCE: f64 = 0.0;
@@ -459,7 +458,6 @@ impl SpatialFilter {
     }
 
     fn resolve_radius(&self, model_params: Option<&ModelParams>) -> Result<f64> {
-        // An explicit radius was validated in `new` and cannot change afterwards.
         if let Some(radius) = self.options.radius {
             return Ok(radius);
         }

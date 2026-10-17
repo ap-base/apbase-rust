@@ -214,7 +214,6 @@ impl Targets for [Geometry] {
             if geometry.geometry_type()? != GeometryTypes::Point {
                 return Err(invalid_targets_error());
             }
-            // An empty point has NaN coordinates.
             if geometry.is_empty()? {
                 x.push(f64::NAN);
                 y.push(f64::NAN);
@@ -408,8 +407,6 @@ where
         return None;
     }
 
-    // A run starts at position 0 and wherever the row changes or the column is
-    // not exactly one more than the previous point's.
     let point_count = shape[0];
     let mut row_indices = Vec::new();
     let mut x_start_indices = Vec::new();

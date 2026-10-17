@@ -177,8 +177,6 @@ fn test_meuse_map_with_real_boundary_stays_inside_it() {
     assert_points_hug_boundary(&real, &boundary("meuse_area.wkt"), 40.0);
     assert_eq!(real.method, hull.method);
     assert!(real.z.len() > hull.z.len());
-    // Every point inside the boundary gets a value, even beyond `radius`, so
-    // the raster holds exactly the map points and NaN everywhere else.
     let (_, _, raster) = real.to_raster().unwrap();
     assert_eq!(n_finite(&real), real.z.len());
     assert_eq!(raster.iter().filter(|v| v.is_finite()).count(), real.z.len());

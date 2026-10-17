@@ -34,7 +34,6 @@ pub(crate) fn run_idw(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: source arrays hold `n` values, target and output arrays `ntargets`.
     unsafe {
         lib::idw_local_(
             x.as_ptr(),
@@ -98,7 +97,6 @@ mod tests {
         let high = z.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         assert!(estimates[1] > low && estimates[1] < high, "{}", estimates[1]);
 
-        // No source within the radius of (1000, 1000): the 8 nearest are used.
         let mut nearest: Vec<(f64, f64)> = x
             .iter()
             .zip(&y)

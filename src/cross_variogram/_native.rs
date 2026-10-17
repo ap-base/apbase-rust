@@ -37,7 +37,6 @@ pub(crate) fn run_fit_cross_variogram(
     let mut n_pairs: c_int = 0;
 
     lib::load();
-    // SAFETY: side A arrays hold `na` values, side B arrays `nb`, model_info 5.
     unsafe {
         lib::fit_cross_variogram_(
             xa.as_ptr(),
@@ -84,7 +83,6 @@ pub(crate) fn run_screen_covariate(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: the three model vectors hold 5 values each; outputs are scalars.
     unsafe {
         lib::screen_covariate_(
             model_00.as_ptr(),
@@ -117,7 +115,6 @@ mod tests {
     fn fisher_p_value_reference(rho: f64, n_pairs: i64) -> f64 {
         let z_fisher = 0.5 * ((1.0 + rho) / (1.0 - rho)).ln();
         let z_stat = z_fisher * ((n_pairs - 3) as f64).sqrt();
-        // SAFETY: erf is a pure libm function.
         let normal_cdf = 0.5 * (1.0 + unsafe { lib::erf(z_stat.abs() / 2f64.sqrt()) });
         2.0 * (1.0 - normal_cdf)
     }

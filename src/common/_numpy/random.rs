@@ -244,7 +244,6 @@ impl Generator {
         let bits = &mut self.bit_generator;
         let cutoff = 50;
         if pop_size > 10_000 && size > pop_size / cutoff {
-            // Tail shuffle `size` elements.
             let mut idx: Vec<i64> = (0..pop_size).collect();
             shuffle_int(
                 bits,
@@ -255,7 +254,6 @@ impl Generator {
             return idx[(pop_size - size) as usize..].to_vec();
         }
 
-        // Floyd's algorithm with an open-addressing hash set.
         let mut idx = vec![0i64; size as usize];
         let set_size = (1.2 * size as f64) as u64;
         let mask = gen_mask(set_size);

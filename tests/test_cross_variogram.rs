@@ -52,7 +52,6 @@ fn pearson(u: &[f64], v: &[f64]) -> f64 {
 fn fisher_p_value_reference(rho: f64, n_pairs: i64) -> f64 {
     let z_fisher = 0.5 * ((1.0 + rho) / (1.0 - rho)).ln();
     let z_stat = z_fisher * ((n_pairs - 3) as f64).sqrt();
-    // erf(t) = 1 - erfc(t)
     let normal_cdf = 0.5 * (1.0 + (1.0 - common::erfc(z_stat.abs() / 2f64.sqrt())));
     2.0 * (1.0 - normal_cdf)
 }
@@ -196,7 +195,7 @@ fn test_insufficient_sample_reports_status_without_raising() {
     .unwrap();
     let report = &result.report["barely_overlapping"];
     assert_eq!(report.n_pairs, 3);
-    assert_eq!(report.status, "amostra insuficiente");
+    assert_eq!(report.status, "insufficient sample");
     assert!(!report.decision);
     assert!(!result.selected.contains_key("barely_overlapping"));
 }
@@ -405,4 +404,44 @@ fn screening_validation_messages() {
         .message(),
         "max_colocation_dist must be None or finite and greater than zero"
     );
+}
+
+#[test]
+fn test_screening_selects_nearly_collinear_secondary() {
+    let mut rng = NumpyRng::new(1);
+    let (x0, y0) = (rng.uniform(0.0, 1000.0, 200), rng.uniform(0.0, 1000.0, 200));
+    let noise0 = rng.normal(0.0, 0.5, 200);
+    let z0: Vec<f64> = (0..200)
+        .map(|i| (x0[i] / 150.0).sin() * (y0[i] / 150.0).cos() * 10.0 + noise0[i])
+        .collect();
+    let (xu, yu) = (rng.uniform(0.0, 1000.0, 800), rng.uniform(0.0, 1000.0, 800));
+    let noiseu = rng.normal(0.0, 1.0, 800);
+    let zu: Vec<f64> = (0..800)
+        .map(|i| 2.0 * (xu[i] / 150.0).sin() * (yu[i] / 150.0).cos() * 10.0 + noiseu[i])
+        .collect();
+    let candidates = IndexMap::from([(
+        "ndvi".to_string(),
+        (Array1::from(xu), Array1::from(yu), Array1::from(zu)),
+    )]);
+
+    let result = screen_secondary_variables(
+        &x0,
+        &y0,
+        &z0,
+        &candidates,
+        ScreeningOptions {
+            max_colocation_dist: Some(30.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let report = &result.report["ndvi"];
+    assert!(report.rho > 0.98, "{}", report.rho);
+    assert!(
+        report.admissible_fraction >= 0.9,
+        "{}",
+        report.admissible_fraction
+    );
+    assert!(report.decision);
 }

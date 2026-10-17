@@ -27,7 +27,6 @@ pub(crate) fn run_variogram(
     let mut model_info = [0.0f64; 5];
 
     lib::load();
-    // SAFETY: x/y/z hold `n` values and model_info has the 5 slots the kernel writes.
     unsafe {
         lib::fit_variogram_models_(
             x.as_ptr(),
@@ -52,7 +51,6 @@ pub(crate) fn run_select_variogram(model_info: &[f64]) -> Result<(Array1<f64>, i
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: model_info holds 5 values and params has the 6 slots the kernel writes.
     unsafe {
         lib::select_variogram_(model_info.as_ptr(), params.as_mut_ptr(), &mut status);
     }
@@ -73,7 +71,6 @@ pub(crate) fn run_evaluate_variogram(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: distance and gamma hold `n` values, model_info holds 5.
     unsafe {
         lib::evaluate_variogram_(
             model_info.as_ptr(),

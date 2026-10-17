@@ -12,7 +12,6 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::enum_variant_names)]
 pub enum ErrorKind {
-    // General-purpose kinds, outside the `ApbaseError` hierarchy.
     /// Invalid argument value.
     ValueError,
     /// Unknown or unset key.
@@ -26,7 +25,6 @@ pub enum ErrorKind {
     /// GEOS failure, e.g. invalid WKT/WKB.
     GEOSException,
 
-    // Base hierarchy.
     /// Base class for all errors raised by apbase.
     ApbaseError,
     /// Input arrays or parameters fail validation (also a `ValueError`).
@@ -46,7 +44,6 @@ pub enum ErrorKind {
     /// Leave-one-out cross-validation fails.
     CrossValidationError,
 
-    // IDW.
     /// The native IDW kernel receives invalid source or target data.
     IDWInvalidDataError,
     /// The IDW search radius is not finite and greater than zero.
@@ -58,7 +55,6 @@ pub enum ErrorKind {
     /// The native IDW kernel fails to allocate its workspace.
     IDWAllocationError,
 
-    // Kriging.
     /// The native kriging kernel receives invalid source or target data.
     KrigingInvalidDataError,
     /// The kriging search radius is invalid.
@@ -72,7 +68,6 @@ pub enum ErrorKind {
     /// Kriging receives an invalid variogram model.
     KrigingInvalidModelError,
 
-    // Cokriging.
     /// The native cokriging kernel receives invalid source or target data.
     CoKrigingInvalidDataError,
     /// The cokriging search radius is invalid.
@@ -88,7 +83,6 @@ pub enum ErrorKind {
     /// The fitted coregionalization matrix is not positive semidefinite.
     CoKrigingNonPSDCoregionalizationError,
 
-    // Spatial filtering.
     /// The native spatial filter kernel receives invalid source data.
     SpatialFilterInvalidDataError,
     /// The spatial filter search radius is not finite and greater than zero.
@@ -98,7 +92,6 @@ pub enum ErrorKind {
     /// The native spatial filter kernel fails to allocate its workspace.
     SpatialFilterAllocationError,
 
-    // Cross-validation.
     /// The native cross-validation kernel receives invalid source or sample data.
     CrossValidationInvalidDataError,
     /// The cross-validation search radius is not finite and greater than zero.
@@ -114,7 +107,6 @@ pub enum ErrorKind {
     /// A cross-validation sample index is out of range.
     CrossValidationInvalidSampleIndexError,
 
-    // Variogram.
     /// The fitted model_info vector has a non-finite model id.
     VariogramInvalidModelIdError,
     /// The native extension returns an unrecognized model id.
@@ -124,7 +116,6 @@ pub enum ErrorKind {
     /// The requested thread count is invalid.
     VariogramInvalidThreadCountError,
 
-    // Cross-variogram / covariate screening.
     /// Fewer than 4 colocated pairs are available for the Fisher z-test.
     CrossVariogramInsufficientSampleError,
     /// A primary or candidate auto-variogram model is invalid.

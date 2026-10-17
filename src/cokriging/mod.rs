@@ -13,7 +13,7 @@ pub use _interpolation::{
     CoKriging, CoKrigingMethod, CoKrigingModelParams, CoKrigingOptions, SecondaryInput,
 };
 
-pub(crate) use _interpolation::Fit;
+pub(crate) use _interpolation::{Fit, is_no_collocated_samples_error};
 pub(crate) use _native::fortran_order;
 #[cfg(test)]
 pub(crate) use _native::{run_co_kriging_icm, run_co_kriging_lmc, run_collocated_cokriging};

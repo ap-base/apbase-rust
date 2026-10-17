@@ -175,7 +175,6 @@ unsafe extern "C" {
 
 /// Complementary error function (glibc libm).
 pub fn erfc(x: f64) -> f64 {
-    // SAFETY: erfc is a pure libm function.
     unsafe { libm_erfc(x) }
 }
 

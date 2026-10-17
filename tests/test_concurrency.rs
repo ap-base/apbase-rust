@@ -119,8 +119,6 @@ fn test_cross_validate_is_safe_under_concurrent_top_level_calls() {
     }
 }
 
-// Every public interpolator can be shared across threads.
-
 #[test]
 fn public_types_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}

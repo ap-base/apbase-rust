@@ -149,7 +149,6 @@ fn sorted_valid_keys() -> String {
 /// # apbase::config._clear();
 /// ```
 pub struct Config {
-    // Insertion order is kept; `Display` lists the keys in that order.
     values: RwLock<Vec<(&'static str, ConfigValue)>>,
 }
 
@@ -393,7 +392,6 @@ mod tests {
             non_negative_float("k", ConfigValue::Int(3)).unwrap(),
             ConfigValue::Float(3.0)
         );
-        // The float validator accepts NaN and infinity.
         assert!(non_negative_float("k", ConfigValue::Float(f64::NAN)).is_ok());
         assert!(non_negative_float("k", ConfigValue::Float(f64::INFINITY)).is_ok());
         assert_eq!(

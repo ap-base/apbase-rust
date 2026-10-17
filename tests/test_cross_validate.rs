@@ -638,3 +638,108 @@ fn test_select_best_model_legacy_two_method_call_unchanged() {
     assert_eq!(best.method, "kriging");
     assert!(best.kriging_score < best.idw_score);
 }
+
+#[test]
+fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() {
+    let mut rng = NumpyRng::new(0);
+    let (x0, y0) = (rng.uniform(0.0, 1000.0, 200), rng.uniform(0.0, 1000.0, 200));
+    let noise0 = rng.normal(0.0, 0.5, 200);
+    let z0: Vec<f64> = (0..200)
+        .map(|i| (x0[i] / 150.0).sin() * (y0[i] / 150.0).cos() * 10.0 + noise0[i])
+        .collect();
+    let (xu, yu) = (rng.uniform(0.0, 1000.0, 600), rng.uniform(0.0, 1000.0, 600));
+    let noiseu = rng.normal(0.0, 1.0, 600);
+    let zu: Vec<f64> = (0..600)
+        .map(|i| -(xu[i] / 150.0).sin() * (yu[i] / 150.0).cos() * 10.0 + noiseu[i])
+        .collect();
+    let secondaries = SecondaryInput::from([("ec", (Array1::from(xu), Array1::from(yu), Array1::from(zu)))]);
+
+    let result = cross_validate_cokriging(
+        &x0,
+        &y0,
+        &z0,
+        &secondaries,
+        CrossValidateCokrigingOptions {
+            seed: Some(0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let methods: Vec<&str> = result.by_method.keys().map(String::as_str).collect();
+    assert_eq!(methods, ["icm", "lmc"]);
+    let params: Vec<&str> = result.model_params.keys().map(String::as_str).collect();
+    assert_eq!(params, ["icm", "lmc"]);
+    assert!(result.by_method.values().all(|method| method.rmse.is_finite()));
+    let best = select_best_model(
+        &result.by_method,
+        SelectBestModelOptions {
+            seed: Some(0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(["icm", "lmc"].contains(&best.method.as_str()));
+}
+
+fn mismatched_structure_field(x: &[f64], y: &[f64], seed: u64, n_centers: usize, scale: f64) -> Vec<f64> {
+    let mut rng = NumpyRng::new(seed);
+    let centers = rng.uniform(0.0, 100.0, n_centers * 2);
+    let amps = rng.normal(0.0, 1.0, n_centers);
+    let mut field = vec![0.0; x.len()];
+    for (k, amp) in amps.iter().enumerate() {
+        for (i, value) in field.iter_mut().enumerate() {
+            let d2 = (x[i] - centers[2 * k]).powi(2) + (y[i] - centers[2 * k + 1]).powi(2);
+            *value += amp * (-d2 / (2.0 * scale.powi(2))).exp();
+        }
+    }
+    field
+}
+
+#[test]
+fn test_cross_validate_cokriging_skips_a_method_whose_fit_is_rejected() {
+    let mut rng = NumpyRng::new(0);
+    let (x, y) = (rng.uniform(0.0, 100.0, 250), rng.uniform(0.0, 100.0, 250));
+    let f_short = mismatched_structure_field(&x, &y, 1, 60, 3.0);
+    let f_med = mismatched_structure_field(&x, &y, 2, 10, 15.0);
+    let f_long = mismatched_structure_field(&x, &y, 3, 3, 70.0);
+    let column = |values: Vec<f64>| {
+        (
+            Array1::from(x.clone()),
+            Array1::from(y.clone()),
+            Array1::from(values),
+        )
+    };
+    let secondaries = SecondaryInput::from([
+        (
+            "short_medium",
+            column((0..250).map(|i| f_short[i] + 3.0 * f_med[i]).collect()),
+        ),
+        (
+            "short_long",
+            column((0..250).map(|i| f_short[i] + 3.0 * f_long[i]).collect()),
+        ),
+        (
+            "medium_long",
+            column((0..250).map(|i| f_med[i] - f_long[i]).collect()),
+        ),
+    ]);
+
+    let result = cross_validate_cokriging(
+        &x,
+        &y,
+        &f_short,
+        &secondaries,
+        CrossValidateCokrigingOptions {
+            seed: Some(0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let methods: Vec<&str> = result.by_method.keys().map(String::as_str).collect();
+    assert_eq!(methods, ["collocated", "lmc"]);
+    let params: Vec<&str> = result.model_params.keys().map(String::as_str).collect();
+    assert_eq!(params, ["collocated", "lmc"]);
+    assert!(result.by_method.values().all(|method| method.rmse.is_finite()));
+}

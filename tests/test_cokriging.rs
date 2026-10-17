@@ -689,36 +689,26 @@ fn test_icm_cokriging_k2_matches_reference_with_correlated_secondaries() {
 
 #[test]
 fn test_icm_cokriging_rejects_non_psd_coregionalization() {
-    let trial_seed = 0u64;
-    let mut rng = NumpyRng::new(trial_seed);
+    let mut rng = NumpyRng::new(0);
     let n = 250;
     let x = rng.uniform(0.0, 100.0, n);
     let y = rng.uniform(0.0, 100.0, n);
-    let f_short = smooth_field(&x, &y, trial_seed * 3 + 1, 40, 4.0);
-    let f_med = smooth_field(&x, &y, trial_seed * 3 + 2, 10, 15.0);
-    let f_long = smooth_field(&x, &y, trial_seed * 3 + 3, 3, 70.0);
-    let z0: Vec<f64> = f_short
-        .iter()
-        .zip(rng.normal(0.0, 0.01, n))
-        .map(|(s, e)| s + e)
-        .collect();
-    let zu1: Vec<f64> = (0..n)
-        .zip(rng.normal(0.0, 0.01, n))
-        .map(|(i, e)| 0.6 * f_short[i] + f_med[i] + e)
-        .collect();
-    let zu2: Vec<f64> = (0..n)
-        .zip(rng.normal(0.0, 0.01, n))
-        .map(|(i, e)| 0.6 * f_short[i] + f_long[i] + e)
-        .collect();
+    let f_short = smooth_field(&x, &y, 1, 60, 3.0);
+    let f_med = smooth_field(&x, &y, 2, 10, 15.0);
+    let f_long = smooth_field(&x, &y, 3, 3, 70.0);
+    let short_medium: Vec<f64> = (0..n).map(|i| f_short[i] + 3.0 * f_med[i]).collect();
+    let short_long: Vec<f64> = (0..n).map(|i| f_short[i] + 3.0 * f_long[i]).collect();
+    let medium_long: Vec<f64> = (0..n).map(|i| f_med[i] - f_long[i]).collect();
 
     let secondaries = SecondaryInput::from([
-        ("medium_range", xyz(&x, &y, &zu1)),
-        ("long_range", xyz(&x, &y, &zu2)),
+        ("short_medium", xyz(&x, &y, &short_medium)),
+        ("short_long", xyz(&x, &y, &short_long)),
+        ("medium_long", xyz(&x, &y, &medium_long)),
     ]);
     let error = CoKriging::from_data(
         &x,
         &y,
-        &z0,
+        &f_short,
         &secondaries,
         CoKrigingOptions {
             method: CoKrigingMethod::Icm,
@@ -1006,4 +996,66 @@ fn cokriging_validation_messages() {
         model.interpolate(&array![[0.0, 0.0]]).unwrap_err().message(),
         "call fit(x0, y0, z0, secondaries) before interpolate(targets)"
     );
+}
+
+#[test]
+fn test_collocated_fit_rejects_secondary_without_collocated_pairs() {
+    let mut rng = NumpyRng::new(0);
+    let (x0, y0) = (rng.uniform(0.0, 1000.0, 120), rng.uniform(0.0, 1000.0, 120));
+    let z0: Vec<f64> = x0.iter().map(|x| (x / 150.0).sin()).collect();
+    let (xu, yu) = (rng.uniform(0.0, 1000.0, 300), rng.uniform(0.0, 1000.0, 300));
+    let zu: Vec<f64> = xu.iter().map(|x| (x / 150.0).sin()).collect();
+
+    let error = CoKriging::from_data(
+        &x0,
+        &y0,
+        &z0,
+        &SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]),
+        CoKrigingOptions {
+            method: CoKrigingMethod::Collocated,
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::ValueError);
+    assert!(error.message().contains("\"ec\""), "{}", error.message());
+    assert!(
+        error.message().contains("collocated samples"),
+        "{}",
+        error.message()
+    );
+}
+
+#[test]
+fn test_icm_fit_returns_psd_coregionalization_matrices() {
+    let mut rng = NumpyRng::new(0);
+    let (x0, y0) = (rng.uniform(0.0, 1000.0, 200), rng.uniform(0.0, 1000.0, 200));
+    let noise0 = rng.normal(0.0, 0.5, 200);
+    let z0: Vec<f64> = (0..200)
+        .map(|i| (x0[i] / 150.0).sin() * (y0[i] / 150.0).cos() * 10.0 + noise0[i])
+        .collect();
+    let xu = [x0.clone(), rng.uniform(0.0, 1000.0, 400)].concat();
+    let yu = [y0.clone(), rng.uniform(0.0, 1000.0, 400)].concat();
+    let noiseu = rng.normal(0.0, 1.0, 600);
+    let zu: Vec<f64> = (0..600)
+        .map(|i| -(xu[i] / 150.0).sin() * (yu[i] / 150.0).cos() * 10.0 + noiseu[i])
+        .collect();
+
+    let model = CoKriging::from_data(
+        &x0,
+        &y0,
+        &z0,
+        &SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]),
+        CoKrigingOptions {
+            method: CoKrigingMethod::Icm,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let (_, _, nugget, sill) = icm_matrices(&model);
+    for (name, matrix) in [("nugget", &nugget), ("sill", &sill)] {
+        let min = eigvalsh(matrix).into_iter().fold(f64::INFINITY, f64::min);
+        assert!(min >= -1e-12, "{name}: {min}");
+    }
 }

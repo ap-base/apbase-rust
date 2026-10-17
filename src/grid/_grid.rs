@@ -332,8 +332,6 @@ impl Grid {
     }
 
     fn axis_range(lo: f64, hi: f64, step: f64) -> Result<Vec<f64>> {
-        // linspace with a rounded count, instead of an arange with a float step,
-        // avoids accumulation error that can drop or add a point at the far edge.
         let start = (lo / step).floor() * step;
         let stop = (hi / step).ceil() * step;
         let count_float = _numpy::rint((stop - start) / step);
@@ -487,7 +485,6 @@ impl Grid {
             return (x.to_vec(), y.to_vec());
         }
 
-        // Cell size from the point cloud's own density, not from `resolution`.
         let area = (_numpy::max(x) - _numpy::min(x)) * (_numpy::max(y) - _numpy::min(y));
         if !area.is_finite() || area <= 0.0 {
             return (x.to_vec(), y.to_vec());

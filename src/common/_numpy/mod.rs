@@ -248,15 +248,12 @@ mod tests {
 
     #[test]
     fn pairwise_sum_regimes() {
-        // n < 8: plain loop from 0.0.
         assert_eq!(sum(&[1.0, 2.0, 3.0]), 6.0);
         assert_eq!(sum(&[]), 0.0);
-        // Exactly representable sums are order independent.
         let small: Vec<f64> = (0..100).map(f64::from).collect();
         assert_eq!(sum(&small), 4950.0);
         let large: Vec<f64> = (0..1000).map(f64::from).collect();
         assert_eq!(naive_identity_pairwise(&large), 499_500.0);
-        // Pairwise blocks change the result vs. a left-to-right loop.
         let values: Vec<f64> = (0..200).map(|i| 1.0 + (i as f64) * 1e-16).collect();
         let sequential: f64 = values.iter().sum();
         assert!(sum(&values).is_finite() && sequential.is_finite());

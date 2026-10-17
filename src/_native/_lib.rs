@@ -26,15 +26,12 @@ unsafe extern "C" {
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }
 
-// glibc's RTLD_DEFAULT: search the global symbol scope.
 const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
 
 /// `OPENBLAS_NUM_THREADS=<threads>` equivalent, applied through OpenBLAS'
 /// runtime API (the library is already initialized when Rust code runs).
 /// Skipped silently when the linked BLAS is not OpenBLAS.
 fn set_blas_threads(threads: c_int) {
-    // SAFETY: dlsym is thread-safe; the symbol, when present, has the
-    // documented OpenBLAS signature `void openblas_set_num_threads(int)`.
     unsafe {
         let symbol = dlsym(RTLD_DEFAULT, c"openblas_set_num_threads".as_ptr());
         if !symbol.is_null() {
@@ -45,7 +42,6 @@ fn set_blas_threads(threads: c_int) {
 }
 
 unsafe extern "C" {
-    // filtering/_native_src/filter_mask.f90
     pub(crate) fn viz_filter_mask_(
         pct_diff: *const f64,
         local_prob: *const f64,
@@ -56,7 +52,6 @@ unsafe extern "C" {
         n: *const c_int,
     );
 
-    // filtering/_native_src/zstats_radius_gridagg.f90
     pub(crate) fn viz_zstats_radius_gridagg_(
         x: *const f64,
         y: *const f64,
@@ -75,7 +70,6 @@ unsafe extern "C" {
         n: *const c_int,
     );
 
-    // variogram/_native_src/variogram_fit.f90
     pub(crate) fn fit_variogram_models_(
         x: *const f64,
         y: *const f64,
@@ -88,7 +82,6 @@ unsafe extern "C" {
         n: *const c_int,
     );
 
-    // variogram/_native_src/variogram_select.f90
     pub(crate) fn select_variogram_(model_info: *const f64, params: *mut f64, status: *mut c_int);
 
     pub(crate) fn evaluate_variogram_(
@@ -100,7 +93,6 @@ unsafe extern "C" {
         n: *const c_int,
     );
 
-    // idw/_native_src/idw_local.f90
     pub(crate) fn idw_local_(
         x: *const f64,
         y: *const f64,
@@ -118,7 +110,6 @@ unsafe extern "C" {
         ntargets: *const c_int,
     );
 
-    // kriging/_native_src/ordinary_kriging_local.f90
     pub(crate) fn ordinary_kriging_local_(
         x: *const f64,
         y: *const f64,
@@ -136,7 +127,6 @@ unsafe extern "C" {
         ntargets: *const c_int,
     );
 
-    // cross_validate/_native_src/cross_validate_local.f90
     pub(crate) fn cross_validate_local_(
         x: *const f64,
         y: *const f64,
@@ -163,7 +153,6 @@ unsafe extern "C" {
         nsamples: *const c_int,
     );
 
-    // cross_validate/_native_src/cokriging_cross_validate_local.f90
     pub(crate) fn cokriging_cross_validate_local_(
         x0: *const f64,
         y0: *const f64,
@@ -213,7 +202,6 @@ unsafe extern "C" {
         n_lmc_continuous: *const c_int,
     );
 
-    // cross_variogram/_native_src/cross_variogram_fit.f90
     pub(crate) fn fit_cross_variogram_(
         xa: *const f64,
         ya: *const f64,
@@ -233,7 +221,6 @@ unsafe extern "C" {
         nb: *const c_int,
     );
 
-    // cross_variogram/_native_src/covariate_screening.f90
     pub(crate) fn screen_covariate_(
         model_00: *const f64,
         model_uu: *const f64,
@@ -249,7 +236,6 @@ unsafe extern "C" {
         status: *mut c_int,
     );
 
-    // cokriging/_native_src/collocated_cokriging_local.f90
     pub(crate) fn collocated_cokriging_local_(
         x0: *const f64,
         y0: *const f64,
@@ -274,7 +260,6 @@ unsafe extern "C" {
         n_offsets: *const c_int,
     );
 
-    // cokriging/_native_src/icm_fit.f90
     pub(crate) fn fit_icm_model_(
         x0: *const f64,
         y0: *const f64,
@@ -298,7 +283,6 @@ unsafe extern "C" {
         nv: *const c_int,
     );
 
-    // cokriging/_native_src/co_kriging_icm_local.f90
     pub(crate) fn co_kriging_icm_local_(
         x0: *const f64,
         y0: *const f64,
@@ -325,7 +309,6 @@ unsafe extern "C" {
         n_secondary_total: *const c_int,
     );
 
-    // cokriging/_native_src/lmc_fit.f90
     pub(crate) fn fit_lmc_model_(
         x0: *const f64,
         y0: *const f64,
@@ -350,7 +333,6 @@ unsafe extern "C" {
         n_continuous: *const c_int,
     );
 
-    // cokriging/_native_src/co_kriging_lmc_local.f90
     pub(crate) fn co_kriging_lmc_local_(
         x0: *const f64,
         y0: *const f64,
@@ -379,7 +361,6 @@ unsafe extern "C" {
     );
 }
 
-// Test-only reference math.
 #[cfg(test)]
 unsafe extern "C" {
     pub(crate) fn erf(x: f64) -> f64;

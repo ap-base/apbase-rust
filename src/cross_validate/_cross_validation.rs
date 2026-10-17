@@ -5,19 +5,20 @@ use std::fmt;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
-use ndarray::Array1;
+use ndarray::{Array1, Array2, Array3};
 
 use super::_native::{
     CokrigingCrossValidateInputs, NativeMethodResult, run_cokriging_cross_validate, run_cross_validate,
 };
 use crate::cokriging::{
     CoKriging, CoKrigingMethod, CoKrigingModelParams, CoKrigingOptions, Fit, SecondaryInput,
+    is_no_collocated_samples_error,
 };
 use crate::common::_numpy;
 use crate::common::_numpy::random::Generator;
 use crate::common::arrays::{ArrayLike, as_float64_1d, filter_finite_xyz, validate_same_size_xyz};
 use crate::common::exceptions::{
-    ApbaseError, COKRIGING_STATUS_ERRORS, CROSS_VALIDATE_STATUS_ERRORS, Result, raise_status_error,
+    ApbaseError, COKRIGING_STATUS_ERRORS, CROSS_VALIDATE_STATUS_ERRORS, ErrorKind, Result, raise_status_error,
 };
 use crate::common::validation::require_neighbor_bounds;
 use crate::config::{resolve_max_neighbors_ceiling, resolve_n_threads, resolve_variogram_profile};
@@ -398,7 +399,12 @@ pub fn cross_validate(
 /// Leave-one-out cross-validate collocated, ICM, and LMC cokriging together.
 ///
 /// The three models are fit once from the full dataset; only the primary is
-/// held out, sharing one primary spatial index and one radius.
+/// held out, sharing one primary spatial index and one radius. A method whose
+/// model cannot be fitted is left out of `by_method` and `model_params`
+/// instead of failing the call: collocated cokriging when a secondary has too
+/// few samples at the primary locations, and ICM or LMC when the fit is
+/// rejected as non-positive-semidefinite or invalid. The first fit error is
+/// returned only when no method can be fitted.
 pub fn cross_validate_cokriging(
     x0: &(impl ArrayLike + ?Sized),
     y0: &(impl ArrayLike + ?Sized),
@@ -435,11 +441,40 @@ pub fn cross_validate_cokriging(
             },
         )
     };
-    let collocated = fit(CoKrigingMethod::Collocated, 2)?;
-    let icm = fit(CoKrigingMethod::Icm, 2)?;
-    let lmc = fit(CoKrigingMethod::Lmc, options.n_structures)?;
+    let is_model_error = |error: &ApbaseError| {
+        is_no_collocated_samples_error(error)
+            || matches!(
+                error.kind(),
+                ErrorKind::CoKrigingNonPSDCoregionalizationError | ErrorKind::CoKrigingInvalidModelError
+            )
+    };
+    let mut fitted: Vec<(&str, CoKriging)> = Vec::with_capacity(3);
+    let mut first_error = None;
+    for (name, method, n_structures) in [
+        ("collocated", CoKrigingMethod::Collocated, 2),
+        ("icm", CoKrigingMethod::Icm, 2),
+        ("lmc", CoKrigingMethod::Lmc, options.n_structures),
+    ] {
+        match fit(method, n_structures) {
+            Ok(model) => fitted.push((name, model)),
+            Err(error) if is_model_error(&error) => {
+                first_error.get_or_insert(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    let Some((_, reference)) = fitted.first() else {
+        return Err(first_error.expect("every skipped method recorded its error"));
+    };
+    let find = |name: &str| {
+        fitted
+            .iter()
+            .find(|(fitted_name, _)| *fitted_name == name)
+            .map(|(_, model)| model)
+    };
+    let (collocated, icm, lmc) = (find("collocated"), find("icm"), find("lmc"));
 
-    let data = collocated.fitted_data().expect("fitted cokriging has data");
+    let data = reference.fitted_data().expect("fitted cokriging has data");
     let radius_value = match options.radius {
         None => {
             let (n_lags, max_pairs, max_distance) = resolve_variogram_profile();
@@ -465,24 +500,33 @@ pub fn cross_validate_cokriging(
     };
 
     let sample_idx = select_sample_idx(data.x0.len(), options.max_points, options.seed);
-    let Some(Fit::Icm {
-        model_id: icm_model_id,
-        model_range,
-        nugget_matrix,
-        sill_matrix,
-    }) = icm.fitted_model()
-    else {
-        unreachable!("ICM cokriging stores an ICM fit");
+    let n_variables = data.secondary_names.len() + 1;
+    let zero_square = Array2::zeros((n_variables, n_variables));
+    let lmc_structures = usize::try_from(options.n_structures).unwrap_or(2).max(2);
+    let placeholder_ranges = Array1::ones(lmc_structures - 1);
+    let placeholder_coefficients = Array3::zeros((lmc_structures, n_variables, n_variables));
+    let (icm_model_id, model_range, nugget_matrix, sill_matrix) = match icm.and_then(CoKriging::fitted_model)
+    {
+        Some(Fit::Icm {
+            model_id,
+            model_range,
+            nugget_matrix,
+            sill_matrix,
+        }) => (*model_id, *model_range, nugget_matrix, sill_matrix),
+        _ => (1.0, 1.0, &zero_square, &zero_square),
     };
-    let Some(Fit::Lmc {
-        model_id: lmc_model_id,
-        structure_ranges,
-        coefficient_matrices,
-    }) = lmc.fitted_model()
-    else {
-        unreachable!("LMC cokriging stores an LMC fit");
+    let (lmc_model_id, structure_ranges, coefficient_matrices) = match lmc.and_then(CoKriging::fitted_model) {
+        Some(Fit::Lmc {
+            model_id,
+            structure_ranges,
+            coefficient_matrices,
+        }) => (*model_id, structure_ranges, coefficient_matrices),
+        _ => (1.0, &placeholder_ranges, &placeholder_coefficients),
     };
-    let collocated_model = collocated.model_values()?;
+    let collocated_model = match collocated {
+        Some(collocated) => collocated.model_values()?,
+        None => Array1::zeros(4 + n_variables),
+    };
 
     let (results, status) = run_cokriging_cross_validate(&CokrigingCrossValidateInputs {
         x0: data.x0.as_slice().expect("contiguous"),
@@ -493,12 +537,15 @@ pub fn cross_validate_cokriging(
         secondary_y: data.secondary_y.as_slice().expect("contiguous"),
         secondary_z: data.secondary_z.as_slice().expect("contiguous"),
         secondary_offset: data.secondary_offset.as_slice().expect("contiguous"),
+        run_collocated: collocated.is_some(),
         collocated_model: collocated_model.as_slice().expect("contiguous"),
-        icm_model_id: *icm_model_id,
-        icm_range: *model_range,
+        run_icm: icm.is_some(),
+        icm_model_id,
+        icm_range: model_range,
         icm_nugget: nugget_matrix,
         icm_sill: sill_matrix,
-        lmc_model_id: *lmc_model_id,
+        run_lmc: lmc.is_some(),
+        lmc_model_id,
         lmc_ranges: structure_ranges.as_slice().expect("contiguous"),
         lmc_coefficients: coefficient_matrices,
         radius: radius_value,
@@ -516,19 +563,20 @@ pub fn cross_validate_cokriging(
 
     let actual = held_out(&data.z0, &sample_idx);
     let [collocated_result, icm_result, lmc_result] = results;
-    let by_method = IndexMap::from([
-        (
-            "collocated".to_string(),
-            method_result(collocated_result, &actual),
-        ),
-        ("icm".to_string(), method_result(icm_result, &actual)),
-        ("lmc".to_string(), method_result(lmc_result, &actual)),
+    let mut native_results = IndexMap::from([
+        ("collocated", collocated_result),
+        ("icm", icm_result),
+        ("lmc", lmc_result),
     ]);
-    let model_params = IndexMap::from([
-        ("collocated".to_string(), collocated.model_params()?),
-        ("icm".to_string(), icm.model_params()?),
-        ("lmc".to_string(), lmc.model_params()?),
-    ]);
+    let mut by_method = IndexMap::new();
+    let mut model_params = IndexMap::new();
+    for (name, model) in &fitted {
+        let result = native_results
+            .shift_remove(name)
+            .expect("one native result per method");
+        by_method.insert(name.to_string(), method_result(result, &actual));
+        model_params.insert(name.to_string(), model.model_params()?);
+    }
     Ok(CokrigingCrossValidationResult {
         by_method,
         n_samples: sample_idx.len() as i64,
@@ -923,7 +971,6 @@ fn validate_config(max_points: i64, power: f64, max_neighbors: i64, min_neighbor
     )
 }
 
-// RNG helpers shared with the integration tests (tests/common).
 #[cfg(test)]
 #[path = "../../tests/common/numpy_rng.rs"]
 mod numpy_rng;

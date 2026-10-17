@@ -35,8 +35,6 @@ pub(crate) fn run_kriging(
     let mut status: c_int = 0;
 
     lib::load();
-    // SAFETY: source arrays hold `n` values, target and output arrays `ntargets`,
-    // model_info holds 5.
     unsafe {
         lib::ordinary_kriging_local_(
             x.as_ptr(),

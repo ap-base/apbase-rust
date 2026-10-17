@@ -34,8 +34,6 @@ static LOGGER: CapturingLogger = CapturingLogger {
 };
 
 fn set_env(value: Option<&str>) {
-    // SAFETY: every test of this binary holds `config_guard()`, so no other
-    // thread reads or writes the environment concurrently.
     unsafe {
         match value {
             Some(value) => std::env::set_var(ENV_VAR, value),
@@ -152,8 +150,6 @@ fn test_resolve_n_threads_warns_and_falls_back_on_malformed_env_var() {
         "warning not emitted: {messages:?}"
     );
 }
-
-// The remaining keys, the validators and the `Display` form.
 
 #[test]
 fn every_key_validates() {

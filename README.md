@@ -34,11 +34,23 @@ apbase = "0.1.3"
 Each GitHub [release](https://github.com/ap-base/apbase-rust/releases) also carries the packaged
 `apbase-<version>.crate`.
 
-System libraries (Fortran/OpenMP/BLAS runtime, GEOS and PROJ):
+System libraries (Fortran/OpenMP/BLAS runtime, GEOS and PROJ). To build:
 
 ```bash
-sudo apt install libgfortran5 libgomp1 libopenblas0 libgeos-dev libproj-dev pkg-config
+sudo apt install gfortran libopenblas-dev libgeos-dev libproj-dev pkg-config
 ```
+
+The Fortran kernels are linked statically, so `gfortran` is not used to compile
+anything; it and `libopenblas-dev` provide the `libgfortran.so` and
+`libopenblas.so` the link step needs. PROJ must be 9.6.2 or newer; with an older
+system PROJ, the `proj-sys` dependency builds PROJ from source, which also needs
+`cmake`, `sqlite3`, `libsqlite3-dev` and `libtiff-dev`.
+
+To run a built binary (for example in a deployment image), only the shared
+runtime libraries are needed: `libgfortran5`, `libgomp1`, `libopenblas0`, the
+GEOS C library (`libgeos-c1t64` on Ubuntu 24.04), and the system PROJ when it
+was linked from the system. A PROJ built from source is linked statically and
+needs only `libsqlite3-0` at run time.
 
 Supported target today: `x86_64-unknown-linux-gnu`.
 

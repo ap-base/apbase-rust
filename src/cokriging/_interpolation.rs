@@ -232,6 +232,20 @@ pub(crate) enum Fit {
     },
 }
 
+const NO_COLLOCATED_SAMPLES_PREFIX: &str = "collocated cokriging: secondary ";
+
+fn no_collocated_samples_error(name: &str) -> ApbaseError {
+    ApbaseError::value_error(format!(
+        "{NO_COLLOCATED_SAMPLES_PREFIX}{name:?} has too few collocated samples with the primary to \
+         estimate its correlation; collocated cokriging needs secondary values at the primary sample \
+         locations (use method='icm' or 'lmc' for heterotopic data)"
+    ))
+}
+
+pub(crate) fn is_no_collocated_samples_error(error: &ApbaseError) -> bool {
+    error.kind() == ErrorKind::ValueError && error.message().starts_with(NO_COLLOCATED_SAMPLES_PREFIX)
+}
+
 /// Fitted standardized data shared with `cross_validate_cokriging`.
 #[derive(Clone, Debug)]
 pub(crate) struct FittedData {
@@ -552,7 +566,7 @@ impl CoKriging {
                 let primary_variogram =
                     Variogram::from_data(&data.x0, &data.y0, &data.z0, variogram_options.clone())?;
                 let mut rhos = Vec::with_capacity(secondary_arrays.len());
-                for (xu, yu, zu) in secondary_arrays {
+                for (name, (xu, yu, zu)) in data.secondary_names.iter().zip(secondary_arrays) {
                     let cross = CrossVariogram::from_data(
                         &data.x0,
                         &data.y0,
@@ -567,7 +581,11 @@ impl CoKriging {
                             max_colocation_dist: None,
                         },
                     )?;
-                    rhos.push(cross.rho()?);
+                    let rho = cross.rho()?;
+                    if !rho.is_finite() {
+                        return Err(no_collocated_samples_error(name));
+                    }
+                    rhos.push(rho);
                 }
                 let model_values: Array1<f64> = primary_variogram
                     .model_values()?
