@@ -90,8 +90,11 @@ $env:PKG_CONFIG = "pkgconf"
 ```
 
 Built programs need the DLLs from `mingw64\bin` (libgfortran, libgomp, OpenBLAS,
-GEOS, PROJ) on `PATH` or next to the executable. The MSVC toolchain
-(`x86_64-pc-windows-msvc`) is not supported yet.
+GEOS, PROJ) on `PATH` or next to the executable. The MSYS2 MINGW64 shell already
+puts them first. Git Bash puts Git's own `mingw64\bin` first instead, whose older
+copies of the same DLLs make programs fail to start
+(`STATUS_ENTRYPOINT_NOT_FOUND`). The MSVC toolchain (`x86_64-pc-windows-msvc`) is
+not supported yet.
 
 When the libraries live elsewhere, `APBASE_FORTRAN_LIB_DIR` (libgfortran and
 libgomp) and `APBASE_BLAS_LIBS` (BLAS libraries, `-L<dir>` entries allowed)
