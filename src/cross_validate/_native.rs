@@ -118,6 +118,7 @@ pub(crate) struct CokrigingCrossValidateInputs<'a> {
     pub(crate) lmc_coefficients: &'a Array3<f64>,
     pub(crate) radius: f64,
     pub(crate) max_neighbors: i64,
+    pub(crate) max_secondary_neighbors: i64,
     pub(crate) min_neighbors: i64,
     pub(crate) n_threads: i64,
 }
@@ -156,6 +157,7 @@ pub(crate) fn run_cokriging_cross_validate(
     let n_lmc_structures = len_c_int(coefficient_shape[0], CONTEXT)?;
     let n_lmc_continuous = len_c_int(inputs.lmc_ranges.len(), CONTEXT)?;
     let max_neighbors = to_c_int(inputs.max_neighbors, CONTEXT)?;
+    let max_secondary_neighbors = to_c_int(inputs.max_secondary_neighbors, CONTEXT)?;
     let min_neighbors = to_c_int(inputs.min_neighbors, CONTEXT)?;
     let thread_count = to_c_int(inputs.n_threads, CONTEXT)?;
     let icm_nugget = fortran_order(inputs.icm_nugget);
@@ -202,6 +204,7 @@ pub(crate) fn run_cokriging_cross_validate(
             lmc_coefficients.as_ptr(),
             &inputs.radius,
             &max_neighbors,
+            &max_secondary_neighbors,
             &min_neighbors,
             &thread_count,
             collocated_pred.as_mut_ptr(),
@@ -376,6 +379,7 @@ mod tests {
             lmc_coefficients: &coefficients,
             radius: 30.0,
             max_neighbors: 16,
+            max_secondary_neighbors: 16,
             min_neighbors: 1,
             n_threads: 1,
         };

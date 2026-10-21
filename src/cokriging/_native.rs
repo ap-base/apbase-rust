@@ -195,6 +195,7 @@ pub(crate) fn run_co_kriging_icm(
     secondary_offset: &[i32],
     radius: f64,
     max_neighbors: i64,
+    max_secondary_neighbors: i64,
     min_neighbors: i64,
     n_threads: i64,
 ) -> Result<(Array1<f64>, i32)> {
@@ -215,6 +216,7 @@ pub(crate) fn run_co_kriging_icm(
     let nugget = fortran_order(nugget_matrix);
     let sill = fortran_order(sill_matrix);
     let max_neighbors = to_c_int(max_neighbors, CONTEXT)?;
+    let max_secondary_neighbors = to_c_int(max_secondary_neighbors, CONTEXT)?;
     let min_neighbors = to_c_int(min_neighbors, CONTEXT)?;
     let thread_count = to_c_int(n_threads, CONTEXT)?;
     let mut estimates = vec![0.0f64; target_x.len()];
@@ -238,6 +240,7 @@ pub(crate) fn run_co_kriging_icm(
             secondary_offset.as_ptr(),
             &radius,
             &max_neighbors,
+            &max_secondary_neighbors,
             &min_neighbors,
             &thread_count,
             estimates.as_mut_ptr(),
@@ -339,6 +342,7 @@ pub(crate) fn run_co_kriging_lmc(
     secondary_offset: &[i32],
     radius: f64,
     max_neighbors: i64,
+    max_secondary_neighbors: i64,
     min_neighbors: i64,
     n_threads: i64,
 ) -> Result<(Array1<f64>, i32)> {
@@ -360,6 +364,7 @@ pub(crate) fn run_co_kriging_lmc(
     require_len(shape[2], secondary_offset.len(), "coefficient_matrices", CONTEXT)?;
     let coefficients = fortran_order(coefficient_matrices);
     let max_neighbors = to_c_int(max_neighbors, CONTEXT)?;
+    let max_secondary_neighbors = to_c_int(max_secondary_neighbors, CONTEXT)?;
     let min_neighbors = to_c_int(min_neighbors, CONTEXT)?;
     let thread_count = to_c_int(n_threads, CONTEXT)?;
     let mut estimates = vec![0.0f64; target_x.len()];
@@ -382,6 +387,7 @@ pub(crate) fn run_co_kriging_lmc(
             secondary_offset.as_ptr(),
             &radius,
             &max_neighbors,
+            &max_secondary_neighbors,
             &min_neighbors,
             &thread_count,
             estimates.as_mut_ptr(),
@@ -561,6 +567,7 @@ mod tests {
             &OFFSET,
             30.0,
             16,
+            16,
             1,
             1,
         )
@@ -605,6 +612,7 @@ mod tests {
                 &s,
                 &OFFSET,
                 radius,
+                max_neighbors,
                 max_neighbors,
                 min_neighbors,
                 1,
@@ -652,6 +660,7 @@ mod tests {
                     secondary_z,
                     &OFFSET,
                     30.0,
+                    16,
                     16,
                     1,
                     1,
@@ -702,6 +711,7 @@ mod tests {
             &s,
             &OFFSET,
             30.0,
+            16,
             16,
             1,
             1,
@@ -755,6 +765,7 @@ mod tests {
                     &OFFSET,
                     radius,
                     max_neighbors,
+                    max_neighbors,
                     1,
                     1,
                 )
@@ -802,11 +813,148 @@ mod tests {
             &OFFSET,
             30.0,
             16,
+            16,
             1,
             1,
         );
         assert_rejected(krige.unwrap_err(), "coefficient_matrices");
         let fit = run_fit_lmc_model(&x, &y, &z, &x, &y[1..], &s, &OFFSET, 2, 10, 0, 0.0, 0.0, 1);
         assert_rejected(fit.unwrap_err(), "secondary_y");
+    }
+
+    #[test]
+    fn icm_and_lmc_reject_zero_secondary_neighbors() {
+        let (x, y, z, s) = data();
+        let (nugget, sill) = icm_matrices();
+        let config = ErrorKind::CoKrigingInvalidConfigurationError;
+        let icm = run_co_kriging_icm(
+            &x, &y, &z, &TARGETS_X, &TARGETS_Y, 1.0, 40.0, &nugget, &sill, &x, &y, &s, &OFFSET, 30.0, 16, 0,
+            1, 1,
+        )
+        .unwrap()
+        .1;
+        assert_status(icm, 3, COKRIGING_STATUS_ERRORS, config);
+        let lmc = run_co_kriging_lmc(
+            &x,
+            &y,
+            &z,
+            &TARGETS_X,
+            &TARGETS_Y,
+            1.0,
+            &[40.0],
+            &lmc_coefficients(),
+            &x,
+            &y,
+            &s,
+            &OFFSET,
+            30.0,
+            16,
+            0,
+            1,
+            1,
+        )
+        .unwrap()
+        .1;
+        assert_status(lmc, 3, COKRIGING_STATUS_ERRORS, config);
+    }
+
+    /// Columns of a CSV under `tests/data`, by header name.
+    fn read_columns(name: &str) -> std::collections::HashMap<String, Vec<f64>> {
+        let path = format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"));
+        let text = std::fs::read_to_string(path).unwrap();
+        let mut lines = text.lines();
+        let header: Vec<String> = lines.next().unwrap().split(',').map(str::to_string).collect();
+        let mut columns: Vec<Vec<f64>> = vec![Vec::new(); header.len()];
+        for line in lines {
+            for (cell, column) in line.split(',').zip(columns.iter_mut()) {
+                column.push(cell.parse().unwrap_or(f64::NAN));
+            }
+        }
+        header.into_iter().zip(columns).collect()
+    }
+
+    /// A gaussian model without nugget on dense raster pixels used to leave
+    /// the ICM/LMC block systems singular (NaN) or give them exploding
+    /// weights (estimates in the thousands for log(zinc) between 4.7 and
+    /// 7.5). With the kernels' gaussian nugget floor every estimate stays
+    /// within the data range. The model is the one the fit produced before
+    /// heterotopic pairing existed: no cross-covariance, no secondary nugget.
+    #[test]
+    fn gaussian_cokriging_on_noise_free_raster_stays_within_the_data() {
+        let meuse = read_columns("meuse.csv");
+        let grid = read_columns("meuse_grid.csv");
+        let (x, y) = (&meuse["x"], &meuse["y"]);
+        let z: Vec<f64> = meuse["zinc"].iter().map(|v| v.ln()).collect();
+        let (gx, gy, dist) = (&grid["x"], &grid["y"], &grid["dist"]);
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let std = |v: &[f64]| {
+            let m = mean(v);
+            (v.iter().map(|a| (a - m).powi(2)).sum::<f64>() / v.len() as f64).sqrt()
+        };
+        let (z_mean, z_std, d_mean, d_std) = (mean(&z), std(&z), mean(dist), std(dist));
+        let secondary_z: Vec<f64> = dist
+            .iter()
+            .map(|d| z_mean + (d - d_mean) * (z_std / d_std))
+            .collect();
+        let offset = [0, gx.len() as i32];
+        let nugget = array![[0.22388, 0.0], [0.0, 0.0]];
+        let sill = array![[0.37619, 0.0], [0.0, 0.63062]];
+        let coefficients = ndarray::stack(ndarray::Axis(0), &[nugget.view(), sill.view()]).unwrap();
+        let z_min = z.iter().copied().fold(f64::INFINITY, f64::min);
+        let z_max = z.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+        for radius in [100.0, 400.0] {
+            let (icm, icm_status) = run_co_kriging_icm(
+                x,
+                y,
+                &z,
+                gx,
+                gy,
+                3.0,
+                966.3674,
+                &nugget,
+                &sill,
+                gx,
+                gy,
+                &secondary_z,
+                &offset,
+                radius,
+                40,
+                40,
+                3,
+                1,
+            )
+            .unwrap();
+            let (lmc, lmc_status) = run_co_kriging_lmc(
+                x,
+                y,
+                &z,
+                gx,
+                gy,
+                3.0,
+                &[966.3674],
+                &coefficients,
+                gx,
+                gy,
+                &secondary_z,
+                &offset,
+                radius,
+                40,
+                40,
+                3,
+                1,
+            )
+            .unwrap();
+            for (status, pred) in [(icm_status, icm), (lmc_status, lmc)] {
+                assert_eq!(status, 0);
+                assert!(pred.iter().all(|v| v.is_finite()), "radius {radius}");
+                let lo = pred.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = pred.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                assert!(
+                    z_min - 0.5 < lo && hi < z_max + 0.5,
+                    "radius {radius}: {lo}..{hi}"
+                );
+            }
+        }
     }
 }

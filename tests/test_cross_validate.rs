@@ -8,7 +8,7 @@ mod common;
 
 use std::time::Instant;
 
-use apbase::cokriging::SecondaryInput;
+use apbase::cokriging::{CoKrigingModelParams, SecondaryInput};
 use apbase::cross_validate::{
     BestModelResult, CrossValidateCokrigingOptions, CrossValidateOptions, CrossValidationResult,
     MethodCrossValidation, Metric, MultiMethodBestModelResult, SelectBestModelOptions, cross_validate,
@@ -639,8 +639,7 @@ fn test_select_best_model_legacy_two_method_call_unchanged() {
     assert!(best.kriging_score < best.idw_score);
 }
 
-#[test]
-fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() {
+fn heterotopic_fixture() -> (Vec<f64>, Vec<f64>, Vec<f64>, SecondaryInput) {
     let mut rng = NumpyRng::new(0);
     let (x0, y0) = (rng.uniform(0.0, 1000.0, 200), rng.uniform(0.0, 1000.0, 200));
     let noise0 = rng.normal(0.0, 0.5, 200);
@@ -653,8 +652,14 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
         .map(|i| -(xu[i] / 150.0).sin() * (yu[i] / 150.0).cos() * 10.0 + noiseu[i])
         .collect();
     let secondaries = SecondaryInput::from([("ec", (Array1::from(xu), Array1::from(yu), Array1::from(zu)))]);
+    (x0, y0, z0, secondaries)
+}
 
-    let result = cross_validate_cokriging(
+#[test]
+fn test_cross_validate_cokriging_rejects_unpaired_heterotopic_secondaries() {
+    let (x0, y0, z0, secondaries) = heterotopic_fixture();
+
+    let error = cross_validate_cokriging(
         &x0,
         &y0,
         &z0,
@@ -664,14 +669,43 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
             ..Default::default()
         },
     )
+    .unwrap_err();
+
+    assert!(error.message().contains("'ec'"), "{}", error.message());
+    assert!(
+        error.message().contains("max_colocation_dist"),
+        "{}",
+        error.message()
+    );
+}
+
+#[test]
+fn test_cross_validate_cokriging_pairs_heterotopic_secondaries_within_max_colocation_dist() {
+    let (x0, y0, z0, secondaries) = heterotopic_fixture();
+
+    let result = cross_validate_cokriging(
+        &x0,
+        &y0,
+        &z0,
+        &secondaries,
+        CrossValidateCokrigingOptions {
+            seed: Some(0),
+            max_colocation_dist: Some(30.0),
+            ..Default::default()
+        },
+    )
     .unwrap();
 
     let methods: Vec<&str> = result.by_method.keys().map(String::as_str).collect();
-    assert_eq!(methods, ["icm", "lmc"]);
+    assert_eq!(methods, ["collocated", "icm", "lmc"]);
     let params: Vec<&str> = result.model_params.keys().map(String::as_str).collect();
-    assert_eq!(params, ["icm", "lmc"]);
+    assert_eq!(params, ["collocated", "icm", "lmc"]);
     assert!(result.by_method.values().all(|method| method.rmse.is_finite()));
-    let best = select_best_model(
+    match &result.model_params["icm"] {
+        CoKrigingModelParams::Icm { sill_matrix, .. } => assert!(sill_matrix[[0, 1]] < 0.0, "{sill_matrix}"),
+        other => panic!("{other:?}"),
+    }
+    select_best_model(
         &result.by_method,
         SelectBestModelOptions {
             seed: Some(0),
@@ -679,7 +713,6 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
         },
     )
     .unwrap();
-    assert!(["icm", "lmc"].contains(&best.method.as_str()));
 }
 
 fn mismatched_structure_field(x: &[f64], y: &[f64], seed: u64, n_centers: usize, scale: f64) -> Vec<f64> {

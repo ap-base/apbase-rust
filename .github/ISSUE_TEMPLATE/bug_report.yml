@@ -1,0 +1,61 @@
+name: Bug report
+description: Wrong result, crash, build or link failure.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For security problems, use the private
+        [vulnerability report](https://github.com/ap-base/apbase-rust/security/advisories/new) instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What went wrong, and the full error message or panic if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal example
+      description: The smallest program (and data, if small) that shows the problem.
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: apbase version
+      placeholder: "0.1.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux x86_64
+        - macOS arm64 (Apple Silicon)
+        - macOS x86_64 (Intel)
+        - Windows x86_64 (GNU toolchain)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: rustc
+    attributes:
+      label: Rust version
+      description: Output of `rustc --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Other environment details
+      description: GEOS and PROJ versions, BLAS in use, `APBASE_*` variables, anything else relevant.
