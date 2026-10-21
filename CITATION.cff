@@ -13,8 +13,8 @@ authors:
   - given-names: "Leonardo Felipe"
     family-names: "Maldaner"
     orcid: "https://orcid.org/0000-0003-2675-767X"
-version: "0.1.4"
-date-released: "2026-10-17"
+version: "0.2.0"
+date-released: "2026-10-21"
 license: Apache-2.0
 url: "https://apbase.io"
 repository-code: "https://github.com/ap-base/apbase-rust"

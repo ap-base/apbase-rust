@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
 ### Added
 
 - macOS support, Apple Silicon (`aarch64-apple-darwin`) and Intel
@@ -39,6 +41,10 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** `CoKrigingOptions` and `CrossValidateCokrigingOptions` have new
+  fields; a struct literal that lists every field needs them too (or
+  `..Default::default()`). ICM and LMC now refuse a secondary without samples
+  paired with the primary instead of fitting a zero cross-covariance (see Fixed).
 - CI runs on every branch, with tests on Linux, macOS (Apple Silicon and Intel)
   and Windows. The release workflow runs the same tests on the native libraries
   it packages and checks that `CITATION.cff` carries the released version.
@@ -88,7 +94,8 @@ project uses [Semantic Versioning](https://semver.org/).
   `min_neighbors` sources lie within the search radius, the `max_neighbors`
   nearest are used, so every target inside the boundary gets a value.
 
-[Unreleased]: https://github.com/ap-base/apbase-rust/compare/0.1.4...HEAD
+[Unreleased]: https://github.com/ap-base/apbase-rust/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/ap-base/apbase-rust/compare/0.1.4...0.2.0
 [0.1.4]: https://github.com/ap-base/apbase-rust/compare/0.1.3...0.1.4
 [0.1.3]: https://github.com/ap-base/apbase-rust/compare/0.1.2...0.1.3
 [0.1.2]: https://github.com/ap-base/apbase-rust/releases/tag/0.1.2

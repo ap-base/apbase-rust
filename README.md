@@ -28,7 +28,7 @@ or in `Cargo.toml`:
 
 ```toml
 [dependencies]
-apbase = "0.1.4"
+apbase = "0.2.0"
 ```
 
 Each GitHub [release](https://github.com/ap-base/apbase-rust/releases) also carries the packaged
