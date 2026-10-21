@@ -1,11 +1,3 @@
-//! Cross-variogram fitting and secondary-variable screening.
-//!
-//! The tests that call the private native wrapper `run_screen_covariate`
-//! directly live as unit tests in `src/cross_variogram/_native.rs`
-//! (`test_high_rho_small_n_is_rejected_by_significance`,
-//! `test_cauchy_schwarz_violation_is_rejected_even_when_significant` and the
-//! native half of `test_insufficient_sample_reports_status_without_raising`).
-
 mod common;
 
 use apbase::cross_variogram::{
@@ -17,7 +9,6 @@ use common::{NumpyRng, assert_allclose};
 use indexmap::IndexMap;
 use ndarray::Array1;
 
-/// Sum of randomly placed Gaussian bumps: smooth and non-periodic.
 fn smooth_field(x: &[f64], y: &[f64], seed: u64, n_centers: usize, length_scale: f64) -> Vec<f64> {
     let mut rng = NumpyRng::new(seed);
     let centers = rng.uniform(0.0, 100.0, n_centers * 2);
@@ -56,7 +47,6 @@ fn fisher_p_value_reference(rho: f64, n_pairs: i64) -> f64 {
     2.0 * (1.0 - normal_cdf)
 }
 
-/// Vector with Pearson correlation exactly `rho` with `z0` (Gram-Schmidt).
 fn with_exact_correlation(z0: &[f64], rho: f64, seed: u64) -> Vec<f64> {
     let mut rng = NumpyRng::new(seed);
     let m0 = mean(z0);

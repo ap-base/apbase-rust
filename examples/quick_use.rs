@@ -1,7 +1,3 @@
-//! The README "Quick Use" example on the Meuse dataset.
-//!
-//!     cargo run --release --example quick_use
-
 use apbase::{Map, MapOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,5 +1,3 @@
-//! Coordinate detection and geographic/metric conversions (`apbase::common::coordinates`).
-
 mod common;
 
 use apbase::common::ErrorKind;

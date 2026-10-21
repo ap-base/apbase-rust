@@ -2,12 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs the same checks on the native libraries of a kernels release.
+  workflow_call:
+    inputs:
+      kernels_version:
+        description: "Release tag of ap-base/apbase-fortran-kernels whose native libraries are tested"
+        type: string
+        default: ""
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -17,7 +23,7 @@ env:
   CARGO_TERM_COLOR: always
   # Same Ubuntu release as the development machine (GEOS/PROJ/glibc versions).
   SYSTEM_PACKAGES: >-
-    ca-certificates curl git gcc g++ gfortran pkg-config zstd
+    ca-certificates curl git gcc g++ gfortran pkg-config zstd jq
     libopenblas-dev libgeos-dev libproj-dev
 
 jobs:
@@ -43,19 +49,102 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   test:
-    name: tests
+    name: tests (linux)
     runs-on: ubuntu-latest
     container: ubuntu:26.04
     steps:
       - name: System libraries
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $SYSTEM_PACKAGES
       - uses: actions/checkout@v4
+      - name: Native library from the kernels release
+        if: inputs.kernels_version != ''
+        shell: bash
+        env:
+          KERNELS_TOKEN: ${{ secrets.APBASE_KERNELS_TOKEN }}
+        run: .github/scripts/fetch_native_library.sh "${{ inputs.kernels_version }}" x86_64-unknown-linux-gnu
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Unit, integration and doc tests
         run: cargo test --release
-      - name: Example
-        run: cargo run --release --example quick_use
+      - name: Examples
+        run: |
+          cargo run --release --example quick_use
+          cargo run --release --example cokriging
+
+  test-macos:
+    name: tests (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+    steps:
+      - name: System libraries (Homebrew)
+        run: |
+          brew install gcc openblas geos proj
+          command -v pkg-config || brew install pkgconf
+      - uses: actions/checkout@v4
+      - name: Native library from the kernels release
+        if: inputs.kernels_version != ''
+        env:
+          KERNELS_TOKEN: ${{ secrets.APBASE_KERNELS_TOKEN }}
+        run: .github/scripts/fetch_native_library.sh "${{ inputs.kernels_version }}" ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit, integration and doc tests
+        run: cargo test --release
+      - name: Examples
+        run: |
+          cargo run --release --example quick_use
+          cargo run --release --example cokriging
+
+  test-windows:
+    name: tests (x86_64-pc-windows-gnu)
+    runs-on: windows-latest
+    # The MINGW64 shell puts its own mingw64/bin first: Git Bash puts Git's
+    # mingw64/bin first, whose older copies of the same DLLs made the test
+    # binaries fail to start (STATUS_ENTRYPOINT_NOT_FOUND).
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      PKG_CONFIG: pkgconf
+    steps:
+      - name: System libraries (MSYS2 MINGW64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-gcc-fortran mingw-w64-x86_64-openblas
+            mingw-w64-x86_64-geos mingw-w64-x86_64-proj mingw-w64-x86_64-pkgconf
+      - uses: actions/checkout@v4
+      - name: Native library from the kernels release
+        if: inputs.kernels_version != ''
+        shell: bash
+        env:
+          KERNELS_TOKEN: ${{ secrets.APBASE_KERNELS_TOKEN }}
+        run: .github/scripts/fetch_native_library.sh "${{ inputs.kernels_version }}" x86_64-pc-windows-gnu
+      - name: GNU Rust toolchain
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+          rustup default stable-x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit, integration and doc tests
+        run: cargo test --release
+      - name: Examples
+        run: |
+          cargo run --release --example quick_use
+          cargo run --release --example cokriging
+      - name: DLLs loaded by the test binaries
+        if: failure()
+        run: for exe in target/release/deps/*.exe; do echo "== $exe"; ldd "$exe"; done
+        continue-on-error: true
 
   msrv:
     name: minimum Rust (1.85)

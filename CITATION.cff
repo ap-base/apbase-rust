@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use APbase in your work, please cite it as below."
+type: software
+title: "APbase (Rust)"
+abstract: >-
+  APbase is an intelligent mapping pipeline for irregular field data,
+  including yield monitor, soil samples, and sensor grids. It automates the
+  map workflow: filtering source data, handling geographic coordinates when
+  needed, building the target grid, comparing interpolation methods (IDW,
+  ordinary kriging, cokriging), and selecting a ready-to-use map without
+  requiring users to choose a mathematical model by hand.
+authors:
+  - given-names: "Leonardo Felipe"
+    family-names: "Maldaner"
+    orcid: "https://orcid.org/0000-0003-2675-767X"
+version: "0.1.4"
+date-released: "2026-10-17"
+license: Apache-2.0
+url: "https://apbase.io"
+repository-code: "https://github.com/ap-base/apbase-rust"
+keywords:
+  - geostatistics
+  - kriging
+  - cokriging
+  - interpolation
+  - precision agriculture
+  - rust

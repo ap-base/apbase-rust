@@ -1,5 +1,3 @@
-//! Point-grid generation from boundaries and data (`apbase::grid`).
-
 mod common;
 
 use apbase::common::ErrorKind;
@@ -8,7 +6,6 @@ use common::NumpyRng;
 use geos::{Geom, Geometry};
 use ndarray::{Array1, Array2};
 
-/// Axis-aligned rectangle (counter-clockwise, starting at (maxx, miny)).
 fn box_polygon(minx: f64, miny: f64, maxx: f64, maxy: f64) -> Geometry {
     Geometry::new_from_wkt(&format!(
         "POLYGON (({maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}, {maxx} {miny}))"

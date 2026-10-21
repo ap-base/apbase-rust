@@ -143,6 +143,15 @@ pub struct CoKrigingOptions {
     pub n_structures: i64,
     /// Optional pre-fitted collocated model vector `[5 primary values, rho_1..rho_K]`.
     pub model_values: Option<Array1<f64>>,
+    /// Distance within which a primary sample is paired with its nearest
+    /// secondary point to estimate the cross-covariances; `None` pairs only
+    /// exactly coincident locations. Heterotopic secondaries, such as
+    /// rasters, need a distance (e.g. half the cell diagonal).
+    pub max_colocation_dist: Option<f64>,
+    /// ICM and LMC only: maximum neighbors of each secondary per target;
+    /// `None` uses `max_neighbors`. Dense secondaries need far fewer than the
+    /// primary, since the nearest ones screen the rest.
+    pub max_secondary_neighbors: Option<i64>,
 }
 
 impl Default for CoKrigingOptions {
@@ -154,6 +163,8 @@ impl Default for CoKrigingOptions {
             min_neighbors: 3,
             n_structures: 2,
             model_values: None,
+            max_colocation_dist: None,
+            max_secondary_neighbors: None,
         }
     }
 }
@@ -232,18 +243,20 @@ pub(crate) enum Fit {
     },
 }
 
-const NO_COLLOCATED_SAMPLES_PREFIX: &str = "collocated cokriging: secondary ";
+const NO_COLLOCATED_SAMPLES_MARKER: &str =
+    " has too few samples paired with the primary samples to estimate its cross-covariance;";
 
 fn no_collocated_samples_error(name: &str) -> ApbaseError {
     ApbaseError::value_error(format!(
-        "{NO_COLLOCATED_SAMPLES_PREFIX}{name:?} has too few collocated samples with the primary to \
-         estimate its correlation; collocated cokriging needs secondary values at the primary sample \
-         locations (use method='icm' or 'lmc' for heterotopic data)"
+        "secondary {}{NO_COLLOCATED_SAMPLES_MARKER} for heterotopic data such as a raster, set \
+         max_colocation_dist (e.g. half the cell diagonal) to pair each primary sample with its nearest \
+         secondary point",
+        quote_str(name)
     ))
 }
 
 pub(crate) fn is_no_collocated_samples_error(error: &ApbaseError) -> bool {
-    error.kind() == ErrorKind::ValueError && error.message().starts_with(NO_COLLOCATED_SAMPLES_PREFIX)
+    error.kind() == ErrorKind::ValueError && error.message().contains(NO_COLLOCATED_SAMPLES_MARKER)
 }
 
 /// Fitted standardized data shared with `cross_validate_cokriging`.
@@ -271,6 +284,8 @@ pub struct CoKriging {
     min_neighbors: i64,
     n_structures: i64,
     initial_model_values: Option<Array1<f64>>,
+    max_colocation_dist: Option<f64>,
+    max_secondary_neighbors: Option<i64>,
     primary_model_params: Option<ModelParams>,
     data: Option<FittedData>,
     fit: Option<Fit>,
@@ -309,6 +324,26 @@ impl CoKriging {
                 ));
             }
         }
+        if let Some(distance) = options.max_colocation_dist {
+            if !distance.is_finite() || distance <= 0.0 {
+                return Err(ApbaseError::value_error(
+                    "max_colocation_dist must be None or finite and greater than zero",
+                ));
+            }
+        }
+        if let Some(max_secondary_neighbors) = options.max_secondary_neighbors {
+            if max_secondary_neighbors <= 0 {
+                return Err(ApbaseError::validation_error(
+                    "max_secondary_neighbors must be greater than zero",
+                ));
+            }
+            let max_neighbors_ceiling = resolve_max_neighbors_ceiling();
+            if max_secondary_neighbors > max_neighbors_ceiling {
+                return Err(ApbaseError::validation_error(format!(
+                    "max_secondary_neighbors must be <= {max_neighbors_ceiling}"
+                )));
+            }
+        }
         Ok(CoKriging {
             method: options.method,
             radius: options.radius,
@@ -316,6 +351,8 @@ impl CoKriging {
             min_neighbors: options.min_neighbors,
             n_structures: options.n_structures,
             initial_model_values,
+            max_colocation_dist: options.max_colocation_dist,
+            max_secondary_neighbors: options.max_secondary_neighbors,
             primary_model_params: None,
             data: None,
             fit: None,
@@ -345,6 +382,18 @@ impl CoKriging {
     /// Number of nested LMC structures.
     pub fn n_structures(&self) -> i64 {
         self.n_structures
+    }
+
+    /// Pairing distance between primary samples and secondary points
+    /// (`None`: exactly coincident locations only).
+    pub fn max_colocation_dist(&self) -> Option<f64> {
+        self.max_colocation_dist
+    }
+
+    /// Maximum neighbors of each secondary per target (ICM and LMC); `None`
+    /// uses `max_neighbors`.
+    pub fn max_secondary_neighbors(&self) -> Option<i64> {
+        self.max_secondary_neighbors
     }
 
     /// OpenMP thread count, resolved live from `apbase.config["n_threads"]`.
@@ -540,7 +589,10 @@ impl CoKriging {
             CoKrigingMethod::Collocated => {
                 self.fit_collocated(&data, &secondary_arrays, &variogram_options)?
             }
-            CoKrigingMethod::Icm => self.fit_icm(&data, &variogram_options)?,
+            CoKrigingMethod::Icm => {
+                self.secondary_rhos(&data, &secondary_arrays, &variogram_options)?;
+                self.fit_icm(&data, &variogram_options)?
+            }
             CoKrigingMethod::Lmc => {
                 let max_structures = resolve_max_lmc_structures_ceiling();
                 if self.n_structures > max_structures {
@@ -548,6 +600,7 @@ impl CoKriging {
                         "n_structures must be <= {max_structures}"
                     )));
                 }
+                self.secondary_rhos(&data, &secondary_arrays, &variogram_options)?;
                 self.fit_lmc(&data, &variogram_options)?;
             }
         }
@@ -565,28 +618,7 @@ impl CoKriging {
             None => {
                 let primary_variogram =
                     Variogram::from_data(&data.x0, &data.y0, &data.z0, variogram_options.clone())?;
-                let mut rhos = Vec::with_capacity(secondary_arrays.len());
-                for (name, (xu, yu, zu)) in data.secondary_names.iter().zip(secondary_arrays) {
-                    let cross = CrossVariogram::from_data(
-                        &data.x0,
-                        &data.y0,
-                        &data.z0,
-                        xu,
-                        yu,
-                        zu,
-                        CrossVariogramOptions {
-                            n_lags: variogram_options.n_lags,
-                            max_pairs: variogram_options.max_pairs,
-                            max_distance: variogram_options.max_distance,
-                            max_colocation_dist: None,
-                        },
-                    )?;
-                    let rho = cross.rho()?;
-                    if !rho.is_finite() {
-                        return Err(no_collocated_samples_error(name));
-                    }
-                    rhos.push(rho);
-                }
+                let rhos = self.secondary_rhos(data, secondary_arrays, variogram_options)?;
                 let model_values: Array1<f64> = primary_variogram
                     .model_values()?
                     .iter()
@@ -613,6 +645,50 @@ impl CoKriging {
         Ok(())
     }
 
+    /// Correlation of each secondary with the primary over the paired samples.
+    ///
+    /// Fails with the "too few paired samples" error for a secondary that
+    /// cannot be paired: every method needs its cross-covariance with the primary.
+    fn secondary_rhos(
+        &self,
+        data: &FittedData,
+        secondary_arrays: &[VariableXYZ],
+        variogram_options: &VariogramOptions,
+    ) -> Result<Vec<f64>> {
+        let mut rhos = Vec::with_capacity(secondary_arrays.len());
+        for (name, (xu, yu, zu)) in data.secondary_names.iter().zip(secondary_arrays) {
+            let cross = CrossVariogram::from_data(
+                &data.x0,
+                &data.y0,
+                &data.z0,
+                xu,
+                yu,
+                zu,
+                CrossVariogramOptions {
+                    n_lags: variogram_options.n_lags,
+                    max_pairs: variogram_options.max_pairs,
+                    max_distance: variogram_options.max_distance,
+                    max_colocation_dist: self.max_colocation_dist,
+                },
+            )?;
+            let rho = cross.rho()?;
+            if !rho.is_finite() {
+                return Err(no_collocated_samples_error(name));
+            }
+            rhos.push(rho);
+        }
+        Ok(rhos)
+    }
+
+    /// The native pairing treats 0 as "exactly coincident only".
+    fn colocation_dist_value(&self) -> f64 {
+        self.max_colocation_dist.unwrap_or(0.0)
+    }
+
+    fn secondary_neighbor_limit(&self) -> i64 {
+        self.max_secondary_neighbors.unwrap_or(self.max_neighbors)
+    }
+
     fn fit_icm(&mut self, data: &FittedData, variogram_options: &VariogramOptions) -> Result<()> {
         let (model_id, model_range, nugget_matrix, sill_matrix, status) = run_fit_icm_model(
             data.x0.as_slice().expect("contiguous"),
@@ -625,7 +701,7 @@ impl CoKriging {
             variogram_options.n_lags,
             variogram_options.max_pairs,
             variogram_options.max_distance,
-            0.0,
+            self.colocation_dist_value(),
             self.n_threads(),
         )?;
         if status != 0 {
@@ -667,7 +743,7 @@ impl CoKriging {
             variogram_options.n_lags,
             variogram_options.max_pairs,
             variogram_options.max_distance,
-            0.0,
+            self.colocation_dist_value(),
             self.n_threads(),
         )?;
         if status != 0 {
@@ -757,6 +833,7 @@ impl CoKriging {
                 offsets,
                 radius_value,
                 self.max_neighbors,
+                self.secondary_neighbor_limit(),
                 self.min_neighbors,
                 self.n_threads(),
             )?,
@@ -779,6 +856,7 @@ impl CoKriging {
                 offsets,
                 radius_value,
                 self.max_neighbors,
+                self.secondary_neighbor_limit(),
                 self.min_neighbors,
                 self.n_threads(),
             )?,

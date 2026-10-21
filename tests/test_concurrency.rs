@@ -1,6 +1,3 @@
-//! Concurrent top-level calls into the native kernels (which reuse `SAVE`d workspaces under OMP critical sections)
-//! must return exactly the sequential results.
-
 mod common;
 
 use apbase::cross_validate::{CrossValidateOptions, CrossValidationResult, cross_validate};
@@ -16,7 +13,6 @@ fn same(a: &Array1<f64>, b: &Array1<f64>) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| common::same_f64(*x, *y))
 }
 
-/// Run `CALLS_PER_ROUND` calls on `MAX_WORKERS` threads; call `i` runs task `i % 2`.
 fn run_round<T: Send>(task: &(dyn Fn(usize) -> T + Sync)) -> Vec<T> {
     let mut results: Vec<Option<T>> = (0..CALLS_PER_ROUND).map(|_| None).collect();
     std::thread::scope(|scope| {

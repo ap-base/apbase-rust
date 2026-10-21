@@ -1,9 +1,8 @@
-//! Cokriging against published real-world benchmarks (Jura, Meuse, Walker
-//! Lake). RMSE checks are regression freezes at `rel=0.05`.
-
 mod common;
 
-use apbase::cokriging::{CoKrigingMethod, CoKrigingOptions, SecondaryInput, co_kriging};
+use apbase::cokriging::{
+    CoKriging, CoKrigingMethod, CoKrigingModelParams, CoKrigingOptions, SecondaryInput, co_kriging,
+};
 use apbase::cross_variogram::{ScreeningOptions, VariableXYZ, screen_secondary_variables};
 use apbase::kriging::{KrigingOptions, ordinary_kriging};
 use common::{NumpyRng, approx, assert_allclose, read_csv};
@@ -266,4 +265,94 @@ fn test_walker_lake_icm_on_sparse_subsample_matches_ordinary_kriging() {
     assert!(!icm_pred.iter().any(|v| v.is_nan()));
     assert!(approx(rmse(&ok_pred, &truth), 222.0783738847038, 0.05, 1e-12));
     assert!(approx(rmse(&icm_pred, &truth), 225.72232223151371, 0.05, 1e-12));
+}
+
+const MEUSE_COLOCATION_DIST: f64 = 28.3;
+const MEUSE_RADIUS: f64 = 400.0;
+
+fn meuse_raster() -> (Vec<f64>, Vec<f64>, Vec<f64>, SecondaryInput) {
+    let meuse = read_csv("meuse.csv");
+    let grid = read_csv("meuse_grid.csv");
+    let z: Vec<f64> = meuse["zinc"].iter().map(|v| v.ln()).collect();
+    let sqrt_dist: Vec<f64> = grid["dist"].iter().map(|v| v.sqrt()).collect();
+    let secondaries = SecondaryInput::from([("sqrt_dist", xyz(&grid["x"], &grid["y"], &sqrt_dist))]);
+    (meuse["x"].clone(), meuse["y"].clone(), z, secondaries)
+}
+
+#[test]
+fn test_meuse_cokriging_with_raster_secondary_regression() {
+    let (x, y, z, secondaries) = meuse_raster();
+    let train: Vec<usize> = NumpyRng::new(0)
+        .choice(z.len() as i64, 110)
+        .into_iter()
+        .map(|i| i as usize)
+        .collect();
+    let test: Vec<usize> = (0..z.len()).filter(|i| !train.contains(i)).collect();
+    let pick = |values: &[f64], idx: &[usize]| -> Vec<f64> { idx.iter().map(|i| values[*i]).collect() };
+    let (x0, y0, z0) = (pick(&x, &train), pick(&y, &train), pick(&z, &train));
+    let truth = pick(&z, &test);
+    let targets: Vec<[f64; 2]> = test.iter().map(|i| [x[*i], y[*i]]).collect();
+
+    let ok_pred = ordinary_kriging(&x0, &y0, &z0, &targets, kriging_options(MEUSE_RADIUS)).unwrap();
+    let ok_rmse = rmse(&ok_pred, &truth);
+    assert!(
+        approx(ok_rmse, 0.3215238376477924, 0.05, 1e-12),
+        "OK RMSE {ok_rmse}"
+    );
+
+    for (method, max_secondary_neighbors, expected) in [
+        (CoKrigingMethod::Collocated, None, 0.31105033389900477),
+        (CoKrigingMethod::Icm, None, 0.2948833593039993),
+        (CoKrigingMethod::Icm, Some(8), 0.2843351846133008),
+        (CoKrigingMethod::Lmc, None, 0.29474084618830976),
+        (CoKrigingMethod::Lmc, Some(8), 0.28243526180634404),
+    ] {
+        let pred = co_kriging(
+            &x0,
+            &y0,
+            &z0,
+            &secondaries,
+            &targets,
+            CoKrigingOptions {
+                max_colocation_dist: Some(MEUSE_COLOCATION_DIST),
+                max_secondary_neighbors,
+                ..options(method, MEUSE_RADIUS)
+            },
+        )
+        .unwrap();
+        assert!(pred.iter().all(|v| v.is_finite()), "{method}");
+        let value = rmse(&pred, &truth);
+        assert!(
+            approx(value, expected, 0.05, 1e-12),
+            "{method} {max_secondary_neighbors:?}: {value} vs {expected}"
+        );
+        assert!(value < ok_rmse, "{method} {max_secondary_neighbors:?}");
+    }
+}
+
+#[test]
+fn test_meuse_icm_with_raster_secondary_covers_the_whole_grid() {
+    let (x, y, z, secondaries) = meuse_raster();
+    let grid = read_csv("meuse_grid.csv");
+    let targets: Vec<[f64; 2]> = grid["x"].iter().zip(&grid["y"]).map(|(a, b)| [*a, *b]).collect();
+
+    let cokriging = CoKriging::from_data(
+        &x,
+        &y,
+        &z,
+        &secondaries,
+        CoKrigingOptions {
+            method: CoKrigingMethod::Icm,
+            max_colocation_dist: Some(MEUSE_COLOCATION_DIST),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let pred = cokriging.interpolate(&targets).unwrap();
+
+    assert!(pred.iter().all(|v| v.is_finite()));
+    match cokriging.model_params().unwrap() {
+        CoKrigingModelParams::Icm { sill_matrix, .. } => assert!(sill_matrix[[0, 1]] < 0.0, "{sill_matrix}"),
+        other => panic!("{other:?}"),
+    }
 }

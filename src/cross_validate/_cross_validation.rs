@@ -246,6 +246,10 @@ pub struct CrossValidateCokrigingOptions {
     pub min_neighbors: i64,
     /// Number of nested LMC structures.
     pub n_structures: i64,
+    /// Pairing distance for the cross-covariances, see [`CoKrigingOptions::max_colocation_dist`].
+    pub max_colocation_dist: Option<f64>,
+    /// Secondary neighbor limit of ICM and LMC, see [`CoKrigingOptions::max_secondary_neighbors`].
+    pub max_secondary_neighbors: Option<i64>,
 }
 
 impl Default for CrossValidateCokrigingOptions {
@@ -257,6 +261,8 @@ impl Default for CrossValidateCokrigingOptions {
             max_neighbors: 40,
             min_neighbors: 3,
             n_structures: 2,
+            max_colocation_dist: None,
+            max_secondary_neighbors: None,
         }
     }
 }
@@ -401,10 +407,10 @@ pub fn cross_validate(
 /// The three models are fit once from the full dataset; only the primary is
 /// held out, sharing one primary spatial index and one radius. A method whose
 /// model cannot be fitted is left out of `by_method` and `model_params`
-/// instead of failing the call: collocated cokriging when a secondary has too
-/// few samples at the primary locations, and ICM or LMC when the fit is
-/// rejected as non-positive-semidefinite or invalid. The first fit error is
-/// returned only when no method can be fitted.
+/// instead of failing the call: any method when a secondary has too few
+/// samples paired with the primary (see `max_colocation_dist`), and ICM or LMC
+/// when the fit is rejected as non-positive-semidefinite or invalid. The first
+/// fit error is returned only when no method can be fitted.
 pub fn cross_validate_cokriging(
     x0: &(impl ArrayLike + ?Sized),
     y0: &(impl ArrayLike + ?Sized),
@@ -438,6 +444,8 @@ pub fn cross_validate_cokriging(
                 min_neighbors: options.min_neighbors,
                 n_structures,
                 model_values: None,
+                max_colocation_dist: options.max_colocation_dist,
+                max_secondary_neighbors: options.max_secondary_neighbors,
             },
         )
     };
@@ -550,6 +558,7 @@ pub fn cross_validate_cokriging(
         lmc_coefficients: coefficient_matrices,
         radius: radius_value,
         max_neighbors: options.max_neighbors,
+        max_secondary_neighbors: options.max_secondary_neighbors.unwrap_or(options.max_neighbors),
         min_neighbors: options.min_neighbors,
         n_threads: resolve_n_threads(),
     })?;
@@ -1154,6 +1163,7 @@ mod tests {
                 &offsets,
                 radius,
                 max_neighbors,
+                max_neighbors,
                 min_neighbors,
                 1,
             )
@@ -1178,6 +1188,7 @@ mod tests {
                 sz,
                 &offsets,
                 radius,
+                max_neighbors,
                 max_neighbors,
                 min_neighbors,
                 1,

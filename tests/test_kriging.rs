@@ -1,5 +1,3 @@
-//! Ordinary kriging (`apbase::kriging`).
-
 mod common;
 
 use apbase::kriging::{Kriging, KrigingOptions, ordinary_kriging};
@@ -36,7 +34,6 @@ fn covariance(h: f64, model_id: i64, nugget: f64, partial_sill: f64, model_range
     }
 }
 
-/// Global ordinary kriging solve: the dense reference for the local kernel.
 #[allow(clippy::too_many_arguments)]
 fn reference_ordinary_kriging(
     x: &[f64],
@@ -210,8 +207,6 @@ fn test_kriging_exact_match_returns_source_value() {
     assert_eq!(result[0], 7.0);
 }
 
-/// One source within the radius is below `min_neighbors = 2`, so the nearest
-/// sources beyond it (here both) are used; the close one dominates.
 #[test]
 fn test_kriging_uses_nearest_sources_below_min_neighbors() {
     let result = kriging(model_values(1.0, 5.0, 30.0, MODEL_SPHERICAL), 5.0, 4, 2)
@@ -222,7 +217,6 @@ fn test_kriging_uses_nearest_sources_below_min_neighbors() {
     assert!(result[0] > 1.0 && result[0] < 1.5, "{}", result[0]);
 }
 
-/// Only the two finite rows remain after fitting, so `min_neighbors = 3` fails.
 #[test]
 fn test_kriging_ignores_non_finite_source_rows() {
     let x = [0.0, 10.0, f64::NAN, 10.0];

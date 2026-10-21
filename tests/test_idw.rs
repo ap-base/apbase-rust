@@ -1,5 +1,3 @@
-//! Inverse distance weighting (`apbase::idw`).
-
 mod common;
 
 use apbase::idw::{IDW, IDWOptions};

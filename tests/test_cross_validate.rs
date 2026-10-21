@@ -1,14 +1,8 @@
-//! Leave-one-out cross-validation and model selection (`apbase::cross_validate`).
-//!
-//! `test_cross_validate_cokriging_matches_manual_loo` needs the private native
-//! wrappers and fitted matrices, so it lives as a unit test in
-//! `src/cross_validate/_cross_validation.rs`.
-
 mod common;
 
 use std::time::Instant;
 
-use apbase::cokriging::SecondaryInput;
+use apbase::cokriging::{CoKrigingModelParams, SecondaryInput};
 use apbase::cross_validate::{
     BestModelResult, CrossValidateCokrigingOptions, CrossValidateOptions, CrossValidationResult,
     MethodCrossValidation, Metric, MultiMethodBestModelResult, SelectBestModelOptions, cross_validate,
@@ -155,9 +149,6 @@ fn test_cross_validate_matches_reference_loocv() {
     }
 }
 
-/// Samples 3 and 4 have one other source within the radius, below
-/// `min_neighbors = 2`: both fall back to their nearest `max_neighbors` others
-/// (here all four), the rest keep their radius neighborhood.
 #[test]
 fn test_cross_validate_uses_nearest_sources_below_min_neighbors() {
     let x = [0.0, 1.0, 2.0, 1000.0, 1001.0];
@@ -388,7 +379,6 @@ fn test_select_best_model_raises_when_both_methods_are_all_nan() {
     assert!(error.is(apbase::common::ErrorKind::ValueError));
 }
 
-/// The metric `"r2"` is rejected when parsed, as a `ValueError`.
 #[test]
 fn test_select_best_model_rejects_invalid_parameters() {
     let actual = array![1.0, 2.0, 3.0, 4.0];
@@ -539,8 +529,6 @@ fn test_cross_validate_cokriging_metrics_match_predictions() {
     }
 }
 
-/// With a 5-unit radius most samples have fewer than `min_neighbors = 3` other
-/// primaries in reach; every method still predicts all of them.
 #[test]
 fn test_cross_validate_cokriging_uses_nearest_sources_below_min_neighbors() {
     let (x0, y0, z0, zu) = cokriging_loo_fixture();
@@ -626,8 +614,6 @@ fn test_select_best_model_generalized_requires_at_least_two_methods() {
     assert!(error.message().contains("at least two methods"));
 }
 
-/// The `CrossValidationResult` call keeps returning `BestModelResult` (the
-/// return type is fixed at compile time by the input type).
 #[test]
 fn test_select_best_model_legacy_two_method_call_unchanged() {
     let actual = array![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -639,8 +625,7 @@ fn test_select_best_model_legacy_two_method_call_unchanged() {
     assert!(best.kriging_score < best.idw_score);
 }
 
-#[test]
-fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() {
+fn heterotopic_fixture() -> (Vec<f64>, Vec<f64>, Vec<f64>, SecondaryInput) {
     let mut rng = NumpyRng::new(0);
     let (x0, y0) = (rng.uniform(0.0, 1000.0, 200), rng.uniform(0.0, 1000.0, 200));
     let noise0 = rng.normal(0.0, 0.5, 200);
@@ -653,8 +638,14 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
         .map(|i| -(xu[i] / 150.0).sin() * (yu[i] / 150.0).cos() * 10.0 + noiseu[i])
         .collect();
     let secondaries = SecondaryInput::from([("ec", (Array1::from(xu), Array1::from(yu), Array1::from(zu)))]);
+    (x0, y0, z0, secondaries)
+}
 
-    let result = cross_validate_cokriging(
+#[test]
+fn test_cross_validate_cokriging_rejects_unpaired_heterotopic_secondaries() {
+    let (x0, y0, z0, secondaries) = heterotopic_fixture();
+
+    let error = cross_validate_cokriging(
         &x0,
         &y0,
         &z0,
@@ -664,14 +655,43 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
             ..Default::default()
         },
     )
+    .unwrap_err();
+
+    assert!(error.message().contains("'ec'"), "{}", error.message());
+    assert!(
+        error.message().contains("max_colocation_dist"),
+        "{}",
+        error.message()
+    );
+}
+
+#[test]
+fn test_cross_validate_cokriging_pairs_heterotopic_secondaries_within_max_colocation_dist() {
+    let (x0, y0, z0, secondaries) = heterotopic_fixture();
+
+    let result = cross_validate_cokriging(
+        &x0,
+        &y0,
+        &z0,
+        &secondaries,
+        CrossValidateCokrigingOptions {
+            seed: Some(0),
+            max_colocation_dist: Some(30.0),
+            ..Default::default()
+        },
+    )
     .unwrap();
 
     let methods: Vec<&str> = result.by_method.keys().map(String::as_str).collect();
-    assert_eq!(methods, ["icm", "lmc"]);
+    assert_eq!(methods, ["collocated", "icm", "lmc"]);
     let params: Vec<&str> = result.model_params.keys().map(String::as_str).collect();
-    assert_eq!(params, ["icm", "lmc"]);
+    assert_eq!(params, ["collocated", "icm", "lmc"]);
     assert!(result.by_method.values().all(|method| method.rmse.is_finite()));
-    let best = select_best_model(
+    match &result.model_params["icm"] {
+        CoKrigingModelParams::Icm { sill_matrix, .. } => assert!(sill_matrix[[0, 1]] < 0.0, "{sill_matrix}"),
+        other => panic!("{other:?}"),
+    }
+    select_best_model(
         &result.by_method,
         SelectBestModelOptions {
             seed: Some(0),
@@ -679,7 +699,6 @@ fn test_cross_validate_cokriging_skips_collocated_for_heterotopic_secondaries() 
         },
     )
     .unwrap();
-    assert!(["icm", "lmc"].contains(&best.method.as_str()));
 }
 
 fn mismatched_structure_field(x: &[f64], y: &[f64], seed: u64, n_centers: usize, scale: f64) -> Vec<f64> {

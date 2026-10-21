@@ -1,5 +1,3 @@
-//! Spatial outlier filtering (`apbase::filtering`).
-
 mod common;
 
 use apbase::filtering::{FilterLevel, SpatialFilter, SpatialFilterOptions};

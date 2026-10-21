@@ -1,5 +1,3 @@
-//! Array coercion, finite filtering and target extraction (`apbase::common::arrays`).
-
 mod common;
 
 use apbase::common::ErrorKind;
@@ -28,7 +26,6 @@ fn test_extract_target_xy_from_list_of_points() {
     assert_eq!(y, array![2.0, 4.0, 6.0]);
 }
 
-/// Points decoded from WKB are accepted like any other GEOS points.
 #[test]
 fn test_extract_target_xy_from_wkb_points() {
     let wkb: Vec<Vec<u8>> = [point(1.0, 2.0), point(3.0, 4.0)]
@@ -58,7 +55,6 @@ fn test_extract_target_xy_rejects_non_point_geometry() {
     );
 }
 
-/// Arrays of the wrong shape and empty geometry lists are rejected.
 #[test]
 fn test_extract_target_xy_rejects_non_geometry_objects() {
     for error in [

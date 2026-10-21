@@ -22,18 +22,41 @@ pub(crate) fn load() {
     });
 }
 
-unsafe extern "C" {
-    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+/// `openblas_set_num_threads` among the loaded libraries, or null.
+#[cfg(unix)]
+fn find_openblas_set_num_threads() -> *mut c_void {
+    unsafe extern "C" {
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+    #[cfg(target_os = "macos")]
+    const RTLD_DEFAULT: *mut c_void = std::ptr::without_provenance_mut(-2isize as usize);
+    #[cfg(not(target_os = "macos"))]
+    const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
+    unsafe { dlsym(RTLD_DEFAULT, c"openblas_set_num_threads".as_ptr()) }
 }
 
-const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
+/// `openblas_set_num_threads` in the loaded OpenBLAS DLL, or null.
+#[cfg(windows)]
+fn find_openblas_set_num_threads() -> *mut c_void {
+    unsafe extern "system" {
+        fn GetModuleHandleA(module_name: *const c_char) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, proc_name: *const c_char) -> *mut c_void;
+    }
+    unsafe {
+        let module = GetModuleHandleA(c"libopenblas.dll".as_ptr());
+        if module.is_null() {
+            return std::ptr::null_mut();
+        }
+        GetProcAddress(module, c"openblas_set_num_threads".as_ptr())
+    }
+}
 
 /// `OPENBLAS_NUM_THREADS=<threads>` equivalent, applied through OpenBLAS'
 /// runtime API (the library is already initialized when Rust code runs).
 /// Skipped silently when the linked BLAS is not OpenBLAS.
 fn set_blas_threads(threads: c_int) {
     unsafe {
-        let symbol = dlsym(RTLD_DEFAULT, c"openblas_set_num_threads".as_ptr());
+        let symbol = find_openblas_set_num_threads();
         if !symbol.is_null() {
             let set_num_threads: extern "C" fn(c_int) = std::mem::transmute(symbol);
             set_num_threads(threads);
@@ -175,6 +198,7 @@ unsafe extern "C" {
         lmc_coefficients: *const f64,
         radius: *const f64,
         max_neighbors: *const c_int,
+        max_secondary_neighbors: *const c_int,
         min_neighbors: *const c_int,
         thread_count: *const c_int,
         collocated_pred: *mut f64,
@@ -299,6 +323,7 @@ unsafe extern "C" {
         secondary_offset: *const c_int,
         radius: *const f64,
         max_neighbors: *const c_int,
+        max_secondary_neighbors: *const c_int,
         min_neighbors: *const c_int,
         thread_count: *const c_int,
         estimates: *mut f64,
@@ -348,6 +373,7 @@ unsafe extern "C" {
         secondary_offset: *const c_int,
         radius: *const f64,
         max_neighbors: *const c_int,
+        max_secondary_neighbors: *const c_int,
         min_neighbors: *const c_int,
         thread_count: *const c_int,
         estimates: *mut f64,

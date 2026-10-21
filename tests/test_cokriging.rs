@@ -1,7 +1,3 @@
-//! Collocated, ICM and LMC cokriging (`apbase::cokriging`).
-//!
-//! Fitted matrices are read through the public `model_params()`.
-
 mod common;
 
 use apbase::cokriging::{
@@ -50,7 +46,6 @@ fn standardize(z0: &[f64], zu: &[f64]) -> Vec<f64> {
 
 type Xyz = (Vec<f64>, Vec<f64>, Vec<f64>);
 
-/// Independent solver of standardized collocated cokriging (MM1).
 #[allow(clippy::too_many_arguments)]
 fn reference_collocated(
     x0: &[f64],
@@ -210,9 +205,6 @@ fn test_collocated_cokriging_k1_matches_reference() {
     assert_allclose(&result, &expected, 1e-6, 1e-6, "K1");
 }
 
-/// (5, 5) has 2 primaries within the radius, below `min_neighbors = 3`, so it
-/// uses all 6 nearest and keeps its secondary; (100, 100) has nothing within
-/// the radius, so the secondary is left out and it is ordinary kriging.
 #[test]
 fn test_collocated_cokriging_uses_nearest_primaries_and_drops_far_secondaries() {
     let x0 = [0.0, 10.0, 0.0, 10.0, 4.0, 7.0];
@@ -463,7 +455,6 @@ fn nearest_within(x: &[f64], y: &[f64], tx: f64, ty: f64, radius: f64, max_neigh
     within
 }
 
-/// General block-kriging reference shared by ICM and LMC (`cov(u, v, h)`).
 fn reference_block_cokriging(
     variables: &[Xyz],
     targets: &Array2<f64>,
@@ -757,8 +748,6 @@ fn test_lmc_cokriging_k1_matches_reference() {
     assert_allclose(&result, &expected, 1e-6, 1e-6, "LMC K1");
 }
 
-/// (300, 300) has no source within the radius: the primary falls back to its
-/// `max_neighbors` nearest and no secondary is in reach.
 #[test]
 fn test_icm_and_lmc_cokriging_use_nearest_primaries_beyond_radius() {
     let mut rng = NumpyRng::new(6);
@@ -922,8 +911,6 @@ fn test_lmc_goulard_voltz_recovers_known_coregionalization() {
     assert!(eigvalsh(&fitted_sill).iter().all(|v| *v >= -1e-6));
 }
 
-/// The method is an enum, so an unknown name fails when the string is parsed
-/// (`ValueError`).
 #[test]
 fn test_cokriging_rejects_invalid_method() {
     let error = "bogus".parse::<CoKrigingMethod>().unwrap_err();
@@ -999,31 +986,181 @@ fn cokriging_validation_messages() {
 }
 
 #[test]
-fn test_collocated_fit_rejects_secondary_without_collocated_pairs() {
+fn test_fit_rejects_secondary_without_paired_samples() {
     let mut rng = NumpyRng::new(0);
     let (x0, y0) = (rng.uniform(0.0, 1000.0, 120), rng.uniform(0.0, 1000.0, 120));
     let z0: Vec<f64> = x0.iter().map(|x| (x / 150.0).sin()).collect();
     let (xu, yu) = (rng.uniform(0.0, 1000.0, 300), rng.uniform(0.0, 1000.0, 300));
     let zu: Vec<f64> = xu.iter().map(|x| (x / 150.0).sin()).collect();
 
-    let error = CoKriging::from_data(
-        &x0,
-        &y0,
-        &z0,
-        &SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]),
-        CoKrigingOptions {
-            method: CoKrigingMethod::Collocated,
+    for method in [
+        CoKrigingMethod::Collocated,
+        CoKrigingMethod::Icm,
+        CoKrigingMethod::Lmc,
+    ] {
+        let error = CoKriging::from_data(
+            &x0,
+            &y0,
+            &z0,
+            &SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]),
+            CoKrigingOptions {
+                method,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ValueError, "{method}");
+        assert!(error.message().contains("'ec'"), "{}", error.message());
+        assert!(
+            error.message().contains("max_colocation_dist"),
+            "{}",
+            error.message()
+        );
+    }
+}
+
+type RasterFixture = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
+
+fn raster_secondary(rng: &mut NumpyRng) -> RasterFixture {
+    let (x0, y0) = (rng.uniform(0.0, 1000.0, 120), rng.uniform(0.0, 1000.0, 120));
+    let z0: Vec<f64> = x0.iter().map(|x| (x / 150.0).sin()).collect();
+    let centers: Vec<f64> = (0..50).map(|i| 10.0 + 20.0 * i as f64).collect();
+    let (mut xu, mut yu) = (Vec::new(), Vec::new());
+    for gy in &centers {
+        for gx in &centers {
+            xu.push(*gx);
+            yu.push(*gy);
+        }
+    }
+    let zu: Vec<f64> = xu.iter().map(|x| (x / 150.0).sin()).collect();
+    (x0, y0, z0, xu, yu, zu)
+}
+
+fn random_targets(rng: &mut NumpyRng, n: usize) -> Vec<[f64; 2]> {
+    let (tx, ty) = (rng.uniform(0.0, 1000.0, n), rng.uniform(0.0, 1000.0, n));
+    tx.into_iter().zip(ty).map(|(a, b)| [a, b]).collect()
+}
+
+#[test]
+fn test_fit_pairs_raster_secondary_within_max_colocation_dist() {
+    let mut rng = NumpyRng::new(0);
+    let (x0, y0, z0, xu, yu, zu) = raster_secondary(&mut rng);
+    let targets = random_targets(&mut rng, 200);
+
+    for method in [
+        CoKrigingMethod::Collocated,
+        CoKrigingMethod::Icm,
+        CoKrigingMethod::Lmc,
+    ] {
+        let cokriging = CoKriging::from_data(
+            &x0,
+            &y0,
+            &z0,
+            &SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]),
+            CoKrigingOptions {
+                method,
+                max_colocation_dist: Some(15.0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let estimates = cokriging.interpolate(&targets).unwrap();
+
+        assert!(estimates.iter().all(|v| v.is_finite()), "{method}");
+        let cross = match cokriging.model_params().unwrap() {
+            CoKrigingModelParams::Collocated { rho, .. } => rho["ec"],
+            CoKrigingModelParams::Icm { sill_matrix, .. } => sill_matrix[[0, 1]],
+            CoKrigingModelParams::Lmc {
+                coefficient_matrices, ..
+            } => (1..coefficient_matrices.dim().0)
+                .map(|l| coefficient_matrices[[l, 0, 1]])
+                .sum(),
+        };
+        assert!(cross > 0.0, "{method}: {cross}");
+    }
+}
+
+#[test]
+fn test_max_secondary_neighbors_defaults_to_max_neighbors() {
+    let mut rng = NumpyRng::new(0);
+    let (x0, y0, z0, xu, yu, zu) = raster_secondary(&mut rng);
+    let targets = random_targets(&mut rng, 200);
+    let secondaries = SecondaryInput::from([("ec", xyz(&xu, &yu, &zu))]);
+
+    for method in [CoKrigingMethod::Icm, CoKrigingMethod::Lmc] {
+        let estimates = |max_secondary_neighbors: Option<i64>| {
+            CoKriging::from_data(
+                &x0,
+                &y0,
+                &z0,
+                &secondaries,
+                CoKrigingOptions {
+                    method,
+                    max_colocation_dist: Some(15.0),
+                    max_secondary_neighbors,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .interpolate(&targets)
+            .unwrap()
+        };
+        let default = estimates(None);
+        assert_eq!(default, estimates(Some(40)), "{method}");
+        let fewer = estimates(Some(8));
+        assert!(fewer.iter().all(|v| v.is_finite()), "{method}");
+        assert_ne!(fewer, default, "{method}");
+    }
+}
+
+#[test]
+fn test_cokriging_validates_colocation_and_secondary_neighbor_options() {
+    for value in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        let error = CoKriging::new(CoKrigingOptions {
+            max_colocation_dist: Some(value),
             ..Default::default()
-        },
-    )
-    .unwrap_err();
-    assert_eq!(error.kind(), ErrorKind::ValueError);
-    assert!(error.message().contains("\"ec\""), "{}", error.message());
-    assert!(
-        error.message().contains("collocated samples"),
-        "{}",
-        error.message()
+        })
+        .unwrap_err();
+        assert!(
+            error
+                .message()
+                .starts_with("max_colocation_dist must be None or finite"),
+            "{}",
+            error.message()
+        );
+    }
+    let secondary_neighbors = |value: i64| {
+        CoKriging::new(CoKrigingOptions {
+            method: CoKrigingMethod::Icm,
+            max_secondary_neighbors: Some(value),
+            ..Default::default()
+        })
+        .unwrap_err()
+    };
+    let error = secondary_neighbors(0);
+    assert!(error.is(ErrorKind::ValueError));
+    assert_eq!(
+        error.message(),
+        "max_secondary_neighbors must be greater than zero"
     );
+    assert!(
+        secondary_neighbors(1_000_000)
+            .message()
+            .starts_with("max_secondary_neighbors must be <=")
+    );
+
+    let cokriging = CoKriging::new(CoKrigingOptions {
+        method: CoKrigingMethod::Icm,
+        max_colocation_dist: Some(5.0),
+        max_secondary_neighbors: Some(8),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(cokriging.max_colocation_dist(), Some(5.0));
+    assert_eq!(cokriging.max_secondary_neighbors(), Some(8));
+    let default = CoKriging::new(CoKrigingOptions::default()).unwrap();
+    assert_eq!(default.max_colocation_dist(), None);
+    assert_eq!(default.max_secondary_neighbors(), None);
 }
 
 #[test]
