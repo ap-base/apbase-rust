@@ -1,5 +1,3 @@
-//! `apbase::config`: keys, validation, precedence and environment overrides.
-
 mod common;
 
 use std::sync::Mutex;
@@ -10,7 +8,6 @@ use apbase::variogram::{Variogram, VariogramOptions};
 
 const ENV_VAR: &str = "APBASE_N_THREADS";
 
-/// Records `log::warn!` messages.
 struct CapturingLogger {
     messages: Mutex<Vec<String>>,
 }
@@ -42,7 +39,6 @@ fn set_env(value: Option<&str>) {
     }
 }
 
-/// `_reset()` + `_restore()`: empty config and no env var around each test.
 struct Reset {
     previous: Option<String>,
     _guard: std::sync::MutexGuard<'static, ()>,

@@ -1,5 +1,3 @@
-//! Shared helpers of the integration tests.
-
 #![allow(dead_code)]
 
 pub mod numpy_rng;
@@ -14,32 +12,26 @@ use ndarray::{Array, Array1, Array2, Dimension};
 #[allow(unused_imports)]
 pub use numpy_rng::NumpyRng;
 
-/// Repository root.
 pub fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// `tests/data/<name>`.
 pub fn data_path(name: &str) -> PathBuf {
     root().join("tests").join("data").join(name)
 }
 
 static CONFIG_LOCK: Mutex<()> = Mutex::new(());
 
-/// Serialize tests touching the process-wide `apbase::config` (cargo runs tests
-/// in parallel threads) and start every such test from an empty config.
 pub fn config_guard() -> MutexGuard<'static, ()> {
     let guard = CONFIG_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     apbase::config._clear();
     guard
 }
 
-/// Bitwise equality, NaN equal to NaN.
 pub fn same_f64(a: f64, b: f64) -> bool {
     (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits()
 }
 
-/// Assert `|a - b| <= atol + rtol * |b|` everywhere (NaN positions must match).
 #[track_caller]
 pub fn assert_allclose<D: Dimension>(
     actual: &Array<f64, D>,
@@ -61,7 +53,6 @@ pub fn assert_allclose<D: Dimension>(
     }
 }
 
-/// Columns of a CSV file in `tests/data` (empty cells become NaN).
 pub fn read_csv(name: &str) -> HashMap<String, Vec<f64>> {
     let mut reader = csv::Reader::from_path(data_path(name)).expect("readable csv");
     let headers: Vec<String> = reader
@@ -85,8 +76,6 @@ pub fn read_csv(name: &str) -> HashMap<String, Vec<f64>> {
     columns
 }
 
-/// Solve `a x = b` by Gaussian elimination with partial pivoting
-/// (reference helper standing in for `np.linalg.solve`).
 pub fn solve(a: &Array2<f64>, b: &Array1<f64>) -> Array1<f64> {
     let n = b.len();
     let mut m = a.clone();
@@ -120,8 +109,6 @@ pub fn solve(a: &Array2<f64>, b: &Array1<f64>) -> Array1<f64> {
     x
 }
 
-/// Eigenvalues of a symmetric matrix (cyclic Jacobi), ascending
-/// (reference helper standing in for `np.linalg.eigvalsh`).
 pub fn eigvalsh(matrix: &Array2<f64>) -> Vec<f64> {
     let n = matrix.nrows();
     let mut a = matrix.clone();
@@ -163,7 +150,6 @@ pub fn eigvalsh(matrix: &Array2<f64>) -> Vec<f64> {
     values
 }
 
-/// Path helper for messages.
 pub fn display(path: &Path) -> String {
     path.display().to_string()
 }
@@ -173,17 +159,14 @@ unsafe extern "C" {
     fn libm_erfc(x: f64) -> f64;
 }
 
-/// Complementary error function (glibc libm).
 pub fn erfc(x: f64) -> f64 {
     unsafe { libm_erfc(x) }
 }
 
-/// `|actual - expected| <= max(rel * |expected|, abs)`.
 pub fn approx(actual: f64, expected: f64, rel: f64, abs: f64) -> bool {
     (actual - expected).abs() <= (rel * expected.abs()).max(abs)
 }
 
-/// Lower Cholesky factor (reference helper standing in for `np.linalg.cholesky`).
 pub fn cholesky(a: &Array2<f64>) -> Array2<f64> {
     let n = a.nrows();
     let mut l = Array2::<f64>::zeros((n, n));
@@ -203,7 +186,6 @@ pub fn cholesky(a: &Array2<f64>) -> Array2<f64> {
     l
 }
 
-/// `np.std` (population) and `np.mean` used by reference helpers.
 pub fn mean_std(values: &[f64]) -> (f64, f64) {
     let n = values.len() as f64;
     let mean = values.iter().sum::<f64>() / n;

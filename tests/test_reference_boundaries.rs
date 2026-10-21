@@ -1,6 +1,3 @@
-//! Real study-area boundaries of the reference datasets (`tests/data/*_area.wkt`)
-//! used as `bounds`, compared with the concave hull inferred when none is given.
-
 mod common;
 
 use std::collections::HashSet;
@@ -10,8 +7,6 @@ use apbase::mapping::{Map, MapOptions, MapResult};
 use common::{data_path, read_csv};
 use geos::{CoordSeq, Geom, Geometry};
 
-/// Jura coordinates are in km, inside the lon/lat range that `Map` auto-detects
-/// as geographic; scaling to meters keeps them projected.
 const JURA_KM_TO_M: f64 = 1000.0;
 
 fn read_wkt(name: &str) -> String {
@@ -42,7 +37,6 @@ fn meuse() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     (meuse["x"].clone(), meuse["y"].clone(), log_zinc)
 }
 
-/// Training and validation points together, in meters.
 fn jura_cadmium() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let (mut x, mut y, mut z) = (Vec::new(), Vec::new(), Vec::new());
     for name in ["jura_prediction.csv", "jura_validation.csv"] {
@@ -73,7 +67,6 @@ fn n_finite(result: &MapResult) -> usize {
     result.z.iter().filter(|v| v.is_finite()).count()
 }
 
-/// Every map point lies within `resolution / 2` of `real` (the grid buffer).
 #[track_caller]
 fn assert_points_hug_boundary(result: &MapResult, real: &Geometry, resolution: f64) {
     for (&x, &y) in result.x.iter().zip(&result.y) {
@@ -108,8 +101,6 @@ fn test_reference_boundaries_are_valid_polygons_covering_every_sample() {
     }
 }
 
-/// `meuse.grid` (the official 40 m prediction grid, cell centers at 20 m
-/// offsets) is contained in the apbase grid built at 20 m inside `meuse.area`.
 #[test]
 fn test_meuse_official_grid_is_subset_of_grid_inside_meuse_area() {
     let grid = Grid::from_wkt(
@@ -133,8 +124,6 @@ fn test_meuse_official_grid_is_subset_of_grid_inside_meuse_area() {
     }
 }
 
-/// How closely the inferred concave hull matches the real boundary: both are
-/// compared as fitted (buffered by `resolution / 2`) boundaries.
 #[test]
 fn test_inferred_hull_overlaps_real_boundary() {
     let (mx, my, _) = meuse();
@@ -212,8 +201,6 @@ fn test_jura_map_with_real_boundary_stays_inside_it() {
     );
 }
 
-/// The real boundary places a target on every exhaustive-grid cell (the hull
-/// only on part of them); finite estimates are scored against the true `v`.
 #[test]
 fn test_walker_map_with_real_boundary_covers_exhaustive_grid() {
     let (x, y, z) = walker_v();

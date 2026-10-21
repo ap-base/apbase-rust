@@ -28,7 +28,6 @@ fn find_openblas_set_num_threads() -> *mut c_void {
     unsafe extern "C" {
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
-    // RTLD_DEFAULT: search every loaded image.
     #[cfg(target_os = "macos")]
     const RTLD_DEFAULT: *mut c_void = std::ptr::without_provenance_mut(-2isize as usize);
     #[cfg(not(target_os = "macos"))]

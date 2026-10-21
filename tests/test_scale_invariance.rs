@@ -1,6 +1,3 @@
-//! Fits must not depend on the unit of the values (`apbase::variogram`,
-//! `apbase::cross_variogram`, `apbase::cokriging`).
-
 mod common;
 
 use apbase::cokriging::{CoKriging, CoKrigingMethod, CoKrigingModelParams, CoKrigingOptions, SecondaryInput};

@@ -1,5 +1,3 @@
-//! Map pipeline (`apbase::mapping`): `Map`, `create_map` and `MapResult`.
-
 mod common;
 
 use std::collections::{HashMap, HashSet};
@@ -40,9 +38,6 @@ fn test_create_map_returns_compact_point_list_with_expected_shapes() {
     assert_eq!(result.resolution, 8.0);
 }
 
-/// `resolution` is the argument of `MapOptions::new` (there is no `Default`),
-/// so omitting it does not compile -- see the `compile_fail` doc-test on
-/// `MapOptions`.
 #[test]
 fn test_create_map_requires_resolution() {
     let options = MapOptions::new(8.0);
@@ -59,9 +54,6 @@ fn test_create_map_requires_resolution() {
     );
 }
 
-/// The eager form `Map::from_data(x, y, z, options)` takes the three arrays
-/// together, so a partial call cannot be written; the lazy form stores no
-/// result until it is called.
 #[test]
 fn test_map_requires_x_y_z_together() {
     let (x, y, z) = synthetic_source(1, 10, 100.0, 0.0);

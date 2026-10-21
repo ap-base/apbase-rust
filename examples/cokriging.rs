@@ -1,16 +1,8 @@
-//! The README "Cokriging" example on the Meuse dataset: zinc (155 samples)
-//! estimated on the 40 m Meuse grid, first with the elevation and the
-//! distance to the river measured at the same samples, then with the
-//! distance to the river as a raster (the grid itself).
-//!
-//!     cargo run --release --example cokriging
-
 use apbase::cokriging::{CoKrigingMethod, CoKrigingOptions, SecondaryInput, co_kriging};
 use apbase::cross_variogram::{ScreeningOptions, VariableXYZ, screen_secondary_variables};
 use indexmap::IndexMap;
 use ndarray::Array1;
 
-/// Columns of a CSV file under `tests/data`, by header name.
 fn read_columns(name: &str) -> Result<IndexMap<String, Vec<f64>>, Box<dyn std::error::Error>> {
     let path = format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"));
     let text = std::fs::read_to_string(path)?;
@@ -66,9 +58,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     summary("collocated cokriging", &estimates);
 
-    // Raster secondary: no grid cell lies on a sample, so each sample is
-    // paired with its nearest cell within half the cell diagonal (28.3 m).
-    // The square root makes its relation with ln(zinc) close to linear.
     let sqrt_dist: Vec<f64> = grid["dist"].iter().map(|v| v.sqrt()).collect();
     let raster = SecondaryInput::from([("sqrt_dist", xyz(&grid["x"], &grid["y"], &sqrt_dist))]);
     let estimates = co_kriging(

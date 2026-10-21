@@ -1,13 +1,6 @@
-//! Architecture rules: the compiled kernels are reached only through the
-//! `_native` layer.
-//!
-//! Only `_native/_lib.rs` declares foreign functions, and only
-//! `_lib.rs`/`_native.rs` files use `lib::` symbols or `unsafe` code.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Every file under `dir`, skipping build output and VCS metadata.
 fn all_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(dir).expect("readable dir") {
         let path = entry.expect("dir entry").path();
@@ -36,7 +29,6 @@ fn file_name(path: &Path) -> &str {
         .unwrap_or_default()
 }
 
-/// Source text without `//` comments, so documentation can mention the rules.
 fn code(path: &Path) -> String {
     fs::read_to_string(path)
         .expect("utf-8 source")
@@ -131,7 +123,6 @@ fn every_layer_module_exists() {
     }
 }
 
-/// No Fortran source file lives anywhere in the crate.
 #[test]
 fn no_fortran_sources_in_the_crate() {
     let mut files = Vec::new();

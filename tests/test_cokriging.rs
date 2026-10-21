@@ -1,7 +1,3 @@
-//! Collocated, ICM and LMC cokriging (`apbase::cokriging`).
-//!
-//! Fitted matrices are read through the public `model_params()`.
-
 mod common;
 
 use apbase::cokriging::{
@@ -50,7 +46,6 @@ fn standardize(z0: &[f64], zu: &[f64]) -> Vec<f64> {
 
 type Xyz = (Vec<f64>, Vec<f64>, Vec<f64>);
 
-/// Independent solver of standardized collocated cokriging (MM1).
 #[allow(clippy::too_many_arguments)]
 fn reference_collocated(
     x0: &[f64],
@@ -210,9 +205,6 @@ fn test_collocated_cokriging_k1_matches_reference() {
     assert_allclose(&result, &expected, 1e-6, 1e-6, "K1");
 }
 
-/// (5, 5) has 2 primaries within the radius, below `min_neighbors = 3`, so it
-/// uses all 6 nearest and keeps its secondary; (100, 100) has nothing within
-/// the radius, so the secondary is left out and it is ordinary kriging.
 #[test]
 fn test_collocated_cokriging_uses_nearest_primaries_and_drops_far_secondaries() {
     let x0 = [0.0, 10.0, 0.0, 10.0, 4.0, 7.0];
@@ -463,7 +455,6 @@ fn nearest_within(x: &[f64], y: &[f64], tx: f64, ty: f64, radius: f64, max_neigh
     within
 }
 
-/// General block-kriging reference shared by ICM and LMC (`cov(u, v, h)`).
 fn reference_block_cokriging(
     variables: &[Xyz],
     targets: &Array2<f64>,
@@ -757,8 +748,6 @@ fn test_lmc_cokriging_k1_matches_reference() {
     assert_allclose(&result, &expected, 1e-6, 1e-6, "LMC K1");
 }
 
-/// (300, 300) has no source within the radius: the primary falls back to its
-/// `max_neighbors` nearest and no secondary is in reach.
 #[test]
 fn test_icm_and_lmc_cokriging_use_nearest_primaries_beyond_radius() {
     let mut rng = NumpyRng::new(6);
@@ -922,8 +911,6 @@ fn test_lmc_goulard_voltz_recovers_known_coregionalization() {
     assert!(eigvalsh(&fitted_sill).iter().all(|v| *v >= -1e-6));
 }
 
-/// The method is an enum, so an unknown name fails when the string is parsed
-/// (`ValueError`).
 #[test]
 fn test_cokriging_rejects_invalid_method() {
     let error = "bogus".parse::<CoKrigingMethod>().unwrap_err();
@@ -1032,10 +1019,8 @@ fn test_fit_rejects_secondary_without_paired_samples() {
     }
 }
 
-/// Primary x, y, z, then secondary x, y, z.
 type RasterFixture = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
 
-/// 120 scattered primary samples and a smooth 20 m raster secondary.
 fn raster_secondary(rng: &mut NumpyRng) -> RasterFixture {
     let (x0, y0) = (rng.uniform(0.0, 1000.0, 120), rng.uniform(0.0, 1000.0, 120));
     let z0: Vec<f64> = x0.iter().map(|x| (x / 150.0).sin()).collect();

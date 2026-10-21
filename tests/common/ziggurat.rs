@@ -1,6 +1,3 @@
-//! Ziggurat tables of numpy's `random_standard_normal` (from numpy's
-//! `ziggurat_constants.h`), used to reproduce `Generator.normal` in tests.
-
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 pub const ZIGGURAT_NOR_R: f64 = 3.6541528853610087963519472518;

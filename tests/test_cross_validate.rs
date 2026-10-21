@@ -1,9 +1,3 @@
-//! Leave-one-out cross-validation and model selection (`apbase::cross_validate`).
-//!
-//! `test_cross_validate_cokriging_matches_manual_loo` needs the private native
-//! wrappers and fitted matrices, so it lives as a unit test in
-//! `src/cross_validate/_cross_validation.rs`.
-
 mod common;
 
 use std::time::Instant;
@@ -155,9 +149,6 @@ fn test_cross_validate_matches_reference_loocv() {
     }
 }
 
-/// Samples 3 and 4 have one other source within the radius, below
-/// `min_neighbors = 2`: both fall back to their nearest `max_neighbors` others
-/// (here all four), the rest keep their radius neighborhood.
 #[test]
 fn test_cross_validate_uses_nearest_sources_below_min_neighbors() {
     let x = [0.0, 1.0, 2.0, 1000.0, 1001.0];
@@ -388,7 +379,6 @@ fn test_select_best_model_raises_when_both_methods_are_all_nan() {
     assert!(error.is(apbase::common::ErrorKind::ValueError));
 }
 
-/// The metric `"r2"` is rejected when parsed, as a `ValueError`.
 #[test]
 fn test_select_best_model_rejects_invalid_parameters() {
     let actual = array![1.0, 2.0, 3.0, 4.0];
@@ -539,8 +529,6 @@ fn test_cross_validate_cokriging_metrics_match_predictions() {
     }
 }
 
-/// With a 5-unit radius most samples have fewer than `min_neighbors = 3` other
-/// primaries in reach; every method still predicts all of them.
 #[test]
 fn test_cross_validate_cokriging_uses_nearest_sources_below_min_neighbors() {
     let (x0, y0, z0, zu) = cokriging_loo_fixture();
@@ -626,8 +614,6 @@ fn test_select_best_model_generalized_requires_at_least_two_methods() {
     assert!(error.message().contains("at least two methods"));
 }
 
-/// The `CrossValidationResult` call keeps returning `BestModelResult` (the
-/// return type is fixed at compile time by the input type).
 #[test]
 fn test_select_best_model_legacy_two_method_call_unchanged() {
     let actual = array![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];

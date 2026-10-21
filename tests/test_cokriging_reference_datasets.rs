@@ -1,6 +1,3 @@
-//! Cokriging against published real-world benchmarks (Jura, Meuse, Walker
-//! Lake). RMSE checks are regression freezes at `rel=0.05`.
-
 mod common;
 
 use apbase::cokriging::{
@@ -270,10 +267,9 @@ fn test_walker_lake_icm_on_sparse_subsample_matches_ordinary_kriging() {
     assert!(approx(rmse(&icm_pred, &truth), 225.72232223151371, 0.05, 1e-12));
 }
 
-const MEUSE_COLOCATION_DIST: f64 = 28.3; // half the diagonal of a 40 m cell
+const MEUSE_COLOCATION_DIST: f64 = 28.3;
 const MEUSE_RADIUS: f64 = 400.0;
 
-/// log(zinc) at the Meuse samples and sqrt(dist) on the official 40 m grid.
 fn meuse_raster() -> (Vec<f64>, Vec<f64>, Vec<f64>, SecondaryInput) {
     let meuse = read_csv("meuse.csv");
     let grid = read_csv("meuse_grid.csv");
@@ -283,11 +279,6 @@ fn meuse_raster() -> (Vec<f64>, Vec<f64>, Vec<f64>, SecondaryInput) {
     (meuse["x"].clone(), meuse["y"].clone(), z, secondaries)
 }
 
-/// Heterotopic cokriging with a raster secondary: log(zinc) at 110 Meuse
-/// samples, sqrt(dist) on the official 40 m grid (3103 cells, none at a
-/// sample location) paired within half the cell diagonal, 45 held-out
-/// samples. Regression freeze at rel=0.05; on this split every method stays
-/// below ordinary kriging.
 #[test]
 fn test_meuse_cokriging_with_raster_secondary_regression() {
     let (x, y, z, secondaries) = meuse_raster();
@@ -339,9 +330,6 @@ fn test_meuse_cokriging_with_raster_secondary_regression() {
     }
 }
 
-/// Default radius on the full grid: every cell gets a value (dense raster
-/// neighborhoods used to leave the block system singular) and the fitted
-/// cross-covariance carries the negative zinc/distance correlation.
 #[test]
 fn test_meuse_icm_with_raster_secondary_covers_the_whole_grid() {
     let (x, y, z, secondaries) = meuse_raster();

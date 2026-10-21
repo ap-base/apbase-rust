@@ -1,7 +1,3 @@
-//! `np.random.default_rng` for tests: the same draws as numpy for `random`,
-//! `uniform`, `normal`, `integers` and `choice`, so the tests generate exactly
-//! the synthetic data their reference values were computed from.
-
 #![allow(dead_code)]
 
 use super::ziggurat::{FI_DOUBLE, KI_DOUBLE, WI_DOUBLE, ZIGGURAT_NOR_INV_R, ZIGGURAT_NOR_R};
@@ -68,7 +64,6 @@ fn seed_sequence_state(seed: u64) -> [u64; 4] {
     [0, 1, 2, 3].map(|k| u64::from(state[2 * k]) | (u64::from(state[2 * k + 1]) << 32))
 }
 
-/// `np.random.default_rng(seed)`.
 pub struct NumpyRng {
     state: u128,
     inc: u128,
@@ -118,12 +113,10 @@ impl NumpyRng {
         (self.next_u64() >> 11) as f64 * (1.0 / 9_007_199_254_740_992.0)
     }
 
-    /// `rng.random(size)`.
     pub fn random(&mut self, size: usize) -> Vec<f64> {
         (0..size).map(|_| self.next_double()).collect()
     }
 
-    /// `rng.uniform(low, high, size)`.
     pub fn uniform(&mut self, low: f64, high: f64, size: usize) -> Vec<f64> {
         let range = high - low;
         (0..size).map(|_| low + range * self.next_double()).collect()
@@ -163,12 +156,10 @@ impl NumpyRng {
         }
     }
 
-    /// `rng.normal(loc, scale, size)`.
     pub fn normal(&mut self, loc: f64, scale: f64, size: usize) -> Vec<f64> {
         (0..size).map(|_| loc + scale * self.standard_normal()).collect()
     }
 
-    /// `rng.standard_normal(size)`.
     pub fn standard_normal_vec(&mut self, size: usize) -> Vec<f64> {
         (0..size).map(|_| self.standard_normal()).collect()
     }
@@ -217,13 +208,11 @@ impl NumpyRng {
         }
     }
 
-    /// `rng.integers(low, high, size)` (int64, `endpoint=False`).
     pub fn integers(&mut self, low: i64, high: i64, size: usize) -> Vec<i64> {
         let rng = (high - 1 - low) as u64;
         (0..size).map(|_| low + self.bounded(rng) as i64).collect()
     }
 
-    /// `rng.choice(n, size, replace=False)`.
     pub fn choice(&mut self, pop_size: i64, size: i64) -> Vec<i64> {
         if pop_size > 10_000 && size > pop_size / 50 {
             let mut idx: Vec<i64> = (0..pop_size).collect();
@@ -266,7 +255,6 @@ impl NumpyRng {
         idx
     }
 
-    /// `rng.choice(n, size, replace=True)` (`integers(0, n, size)`).
     pub fn choice_with_replacement(&mut self, pop_size: i64, size: usize) -> Vec<i64> {
         self.integers(0, pop_size, size)
     }

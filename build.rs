@@ -1,20 +1,3 @@
-//! Links the Fortran kernels shipped in `native/<target>/libapbase_native.a`
-//! and the runtime libraries they need: libgfortran, libgomp (OpenMP), a
-//! BLAS/LAPACK providing `dsyev_` (OpenBLAS by default) and, on Linux, libm
-//! and libmvec.
-//!
-//! The runtime comes from the system: the distribution packages on Linux,
-//! Homebrew `gcc` and `openblas` on macOS, MSYS2 MINGW64 on Windows (GNU
-//! toolchain, `x86_64-pc-windows-gnu`).
-//!
-//! Environment overrides:
-//! - `APBASE_NATIVE_LIB_DIR`: directory containing `libapbase_native.a`
-//!   (development builds, unsupported targets).
-//! - `APBASE_FORTRAN_LIB_DIR`: directory containing libgfortran and libgomp,
-//!   when they are not found automatically.
-//! - `APBASE_BLAS_LIBS`: space-separated BLAS/LAPACK libraries to link instead
-//!   of `openblas`; `-L<dir>` entries add search directories.
-
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -91,7 +74,6 @@ fn main() {
         }
         Err(_) => {
             if target_os == "macos" {
-                // Homebrew's openblas is keg-only: not in the default linker paths.
                 for dir in homebrew_dirs("opt/openblas/lib") {
                     println!("cargo:rustc-link-search=native={}", dir.display());
                 }
@@ -107,8 +89,6 @@ fn main() {
     }
 }
 
-/// Directories holding libgfortran and libgomp that the linker may not search
-/// by itself: the system linker on macOS does not know Homebrew GCC's paths.
 fn fortran_lib_dirs(target: &str, target_os: &str) -> Vec<PathBuf> {
     if let Some(dir) = env::var_os("APBASE_FORTRAN_LIB_DIR") {
         return vec![PathBuf::from(dir)];
@@ -119,7 +99,6 @@ fn fortran_lib_dirs(target: &str, target_os: &str) -> Vec<PathBuf> {
         _ => return Vec::new(),
     };
     let mut dirs = Vec::new();
-    // The installed gfortran knows where its runtime is; only meaningful when not cross-compiling.
     if env::var("HOST").as_deref() == Ok(target) {
         let fc = env::var("FC").unwrap_or_else(|_| "gfortran".to_string());
         for lib in RUNTIME_LIBS {
@@ -136,8 +115,6 @@ fn fortran_lib_dirs(target: &str, target_os: &str) -> Vec<PathBuf> {
     dirs
 }
 
-/// `<fc> -print-file-name=<file>` gives the full path when the compiler ships
-/// that file, and the bare name otherwise.
 fn compiler_lib_dir(fc: &str, file: &str) -> Option<PathBuf> {
     let output = Command::new(fc)
         .arg(format!("-print-file-name={file}"))
@@ -151,7 +128,6 @@ fn compiler_lib_dir(fc: &str, file: &str) -> Option<PathBuf> {
     }
 }
 
-/// Existing `<prefix>/<relative>` directories, `$HOMEBREW_PREFIX` first.
 fn homebrew_dirs(relative: &str) -> Vec<PathBuf> {
     let mut prefixes: Vec<PathBuf> = env::var_os("HOMEBREW_PREFIX")
         .map(PathBuf::from)
